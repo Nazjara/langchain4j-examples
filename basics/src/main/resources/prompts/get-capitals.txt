@@ -1,0 +1,1 @@
+List the capitals of all countries in {{region}}.

@@ -1,0 +1,26 @@
+@host = http://localhost:8080
+
+### Free-text question
+POST {{host}}/ask
+Content-Type: application/json
+
+{
+  "question": "Give me a dad joke"
+}
+
+### Free-text question with Result<T> metadata (LangChain4j-only)
+POST {{host}}/ask/result
+Content-Type: application/json
+
+{
+  "question": "Give me a dad joke"
+}
+
+### Structured output: single field
+GET {{host}}/capital?country=France
+
+### Structured output: typed record
+GET {{host}}/capital/details?country=France
+
+### Structured output: list
+GET {{host}}/capitals?region=Scandinavia

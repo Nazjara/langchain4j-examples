@@ -1,6 +1,6 @@
 # LangChain4j Examples
 
-Examples of using [LangChain4j](https://docs.langchain4j.dev) with Spring Boot, built as a side-by-side counterpart of [spring-ai-examples](../spring-ai-examples): same modules, endpoints and models, so the two frameworks can be compared directly. See [COMPARISON.md](COMPARISON.md).
+Examples of using [LangChain4j](https://docs.langchain4j.dev) with Spring Boot, built as a side-by-side counterpart of [spring-ai-examples](../spring-ai-examples): same modules and endpoints, so the two frameworks can be compared directly. See [COMPARISON.md](COMPARISON.md).
 
 ## Prerequisites
 
@@ -27,6 +27,9 @@ Examples of using [LangChain4j](https://docs.langchain4j.dev) with Spring Boot, 
 
 ## Modules
 
+### basics
+Plain Q&A, prompt templates and structured output through one `@AiService` interface (`Assistant`) with no implementation class. Structured output uses Claude's native JSON-schema mode, enabled by a hand-built `ChatModel` bean (`ChatModelConfig`). `POST /ask/result` is LangChain4j-only: it returns `Result<T>` metadata (token usage, finish reason).
+
 ## Usage
 
 Each module can be run independently:
@@ -37,3 +40,13 @@ cd <module-name>
 ```
 
 ## API Examples
+
+### basics (port 8080)
+
+```bash
+curl -X POST http://localhost:8080/ask -H 'Content-Type: application/json' -d '{"question": "Give me a dad joke"}'
+curl -X POST http://localhost:8080/ask/result -H 'Content-Type: application/json' -d '{"question": "Give me a dad joke"}'
+curl 'http://localhost:8080/capital?country=France'
+curl 'http://localhost:8080/capital/details?country=France'
+curl 'http://localhost:8080/capitals?region=Scandinavia'
+```

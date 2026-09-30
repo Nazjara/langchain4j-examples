@@ -19,17 +19,21 @@ Root `pom.xml` is the parent: Spring Boot parent, `langchain4j-bom` (`langchain4
 
 | Module | Entry points | LangChain4j surface |
 |---|---|---|
+| `basics` | `POST /ask`, `POST /ask/result`, `GET /capital`, `GET /capital/details`, `GET /capitals` | `@AiService`, `@UserMessage(fromResource)`, `@V`, return-type structured output, `Result<T>`, custom `ChatModel` with `RESPONSE_FORMAT_JSON_SCHEMA` |
 
 Package convention per module (`com.nazjara`): `rest/QuestionController`, `service/` (`@AiService` interfaces; `AiServiceImpl` only when there is real orchestration), `model/` records, `configuration/`, `bootstrap/`, `tool/`.
 
 ## Conventions
 
-- Mirror the matching `spring-ai-examples` module: same module name, endpoints, request/response records, env vars and Claude model id, so differences come from the framework only.
+- Mirror the matching `spring-ai-examples` module: same module name, endpoints, request/response records and env vars, so differences come from the framework only.
+- Claude models: `claude-sonnet-5-5` is the minimum; never Haiku, even where the Spring AI module uses it.
+- A module that defines its own `ChatModel` bean (e.g. `basics`, for native JSON-schema output) reads its settings from `ai.anthropic.*`, not `langchain4j.anthropic.chat-model.*`: setting the starter's `api-key` registers a second `ChatModel` and breaks `@AiService` wiring.
 - Java records for DTOs; Lombok for `@Slf4j` / `@RequiredArgsConstructor`. Record fields the model fills get `@Description`.
 - Educational project: Javadoc every class and public method in the API (`rest/`), service, client and config/bootstrap layers. Explain *what LangChain4j does under the hood* (AI Service proxy, tool loop, retrieval augmentor, memory provider) and name the Spring AI equivalent. Models/records don't need it. Verify with `./mvnw javadoc:javadoc -Ddoclint=all,-missing -Dshow=private`.
 - Prompt templates live in `src/main/resources/prompts/*.txt` using LangChain4j `{{var}}` syntax, referenced via `@SystemMessage`/`@UserMessage(fromResource = "/prompts/...")`.
 - Model settings go in each module's `application.properties` under `langchain4j.anthropic.chat-model.*`.
 - `@AiService` auto-wiring fails on duplicate beans of the same type; use `wiringMode = EXPLICIT` or `AiServices.builder(...)` in `@Configuration` when a module needs two differently wired services.
 - After each module: add its row(s) to `COMPARISON.md` and its section to `README.md`.
+- Each module has `<module>/<module>.http` (IntelliJ HTTP Client) with one request per endpoint, using a `@host` variable. This is how the user runs requests.
 - New feature = new module registered in root `<modules>`.
 - MCP naming: an app that calls MCP servers is named `*-agent`, never `*-client` or `*-host`.

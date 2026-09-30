@@ -18,6 +18,7 @@
     <description>langchain4j-examples</description>
 
     <modules>
+        <module>basics</module>
     </modules>
 
     <properties>

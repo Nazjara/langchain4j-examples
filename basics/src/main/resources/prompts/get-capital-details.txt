@@ -1,0 +1,1 @@
+Give details about the capital of {{country}}.
