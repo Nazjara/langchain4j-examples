@@ -1,0 +1,5 @@
+{{reviews}}
+
+<instructions>
+Write the description for the book's product page from the reviews above. Shoppers skim, so keep it to a short paragraph, and cover what all three reviews agree on.
+</instructions>

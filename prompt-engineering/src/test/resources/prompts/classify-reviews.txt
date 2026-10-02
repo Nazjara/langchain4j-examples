@@ -1,0 +1,3 @@
+{{reviews}}
+
+Analyze each review: its sentiment, the emotions the writer expresses, whether the writer is angry, and a one-sentence summary in English.

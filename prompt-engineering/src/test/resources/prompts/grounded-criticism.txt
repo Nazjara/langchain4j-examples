@@ -1,0 +1,5 @@
+{{reviews}}
+
+<instructions>
+What do these reviewers criticize about the product? First copy the sentences that support each criticism into <quotes> tags, citing the review index, then give your answer in <answer> tags, based only on those quotes.
+</instructions>
