@@ -1,0 +1,17 @@
+@host = http://localhost:8080
+
+### Weather question answered via the currentWeather tool
+POST {{host}}/weather
+Content-Type: application/json
+
+{
+  "question": "What is the weather in Lviv, Ukraine? When are sunrise and sunset?"
+}
+
+### Same, plus the tool calls the loop made (LangChain4j-only)
+POST {{host}}/weather/tool-calls
+Content-Type: application/json
+
+{
+  "question": "Compare the current weather in Lviv, Ukraine and Kyiv, Ukraine."
+}

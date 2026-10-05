@@ -21,6 +21,7 @@ Root `pom.xml` is the parent: Spring Boot parent, `langchain4j-bom` (`langchain4
 |---|---|---|
 | `basics` | `POST /ask`, `POST /ask/result`, `GET /capital`, `GET /capital/details`, `GET /capitals` | `@AiService`, `@UserMessage(fromResource)`, `@V`, return-type structured output, `Result<T>`, custom `ChatModel` with `RESPONSE_FORMAT_JSON_SCHEMA` |
 | `prompt-engineering` | Tests only (no endpoints, no Spring context) | Test-local AI Services via `AiServices.create`, `@SystemMessage`, `Result<T>.finalResponse()`, Anthropic thinking/effort/caching, few-shot via `ChatModel.chat(messages)` |
+| `functions` | `POST /weather`, `POST /weather/tool-calls` | `@Tool`/`@P` bean auto-wired into `@AiService`, `Result.toolExecutions()`; stub-model test for `ToolSpecification` + `ToolExecutor`, `maxToolCallingRoundTrips`, `toolExecutionErrorHandler` |
 
 Package convention per module (`com.nazjara`): `rest/QuestionController`, `service/` (`@AiService` interfaces; `AiServiceImpl` only when there is real orchestration), `model/` records, `configuration/`, `bootstrap/`, `tool/`.
 

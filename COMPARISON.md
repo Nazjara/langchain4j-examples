@@ -24,6 +24,7 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 |---|---|---|---|
 | `basics` | `AiService` interface + hand-written `AiServiceImpl` over `ChatClient`; `.entity(...)` / `ParameterizedTypeReference`; `.st` templates | `@AiService` interface only (generated proxy); return type drives the schema; `@UserMessage(fromResource)` + `@V`; `Result<T>` for metadata | One class fewer. Native JSON-schema output needs a hand-built `ChatModel` (`supportedCapabilities`) because the starter can't declare capabilities |
 | `prompt-engineering` | `@SpringBootTest` + `ChatClient`; system, messages, options and `.entity(...)` all set per call | Plain JUnit, no Spring context; test-local AI Service interfaces built with `AiServices.create(...)`; few-shot drops to `ChatModel.chat(messages)` | Thinking display and effort are model-level, so each variant is its own model. Effort has no typed setter (`customParameters`) |
+| `functions` | `Function<WeatherRequest, WeatherResponse>` wrapped in `FunctionToolCallback`, passed per call with `.tools(...)`; loop run by the auto-registered `ToolCallingAdvisor` | `@Tool` method on a `@Component`, auto-discovered and wired into every `@AiService`; loop runs inside the AI Service proxy; `Result.toolExecutions()` exposes each call | Schema comes from the method parameters (`@P`), not an input record. Round-trip cap and error handlers exist only on `AiServices.builder(...)`, not in the starter |
 
 ### basics: what felt different
 
@@ -46,17 +47,34 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 - **Anthropic counters need a cast.** Cache read/write tokens live on `AnthropicTokenUsage`, and the cache-miss reason on `AnthropicChatResponseMetadata.cacheDiagnostics()`. Spring AI's generic `Usage` exposes the read/write counts directly, but has no miss reason.
 - **Same prompt, no visible reasoning.** With the shared 3x8 domino problem, Sonnet 5.5 returned no thinking text and high effort used fewer output tokens than low (116 vs 189). The answer is well known, so adaptive thinking likely skipped reasoning altogether. This is a property of the prompt, not of either framework.
 
+### functions: what felt different
+
+- **Tools are global by default.** The starter hands every `@Tool` bean to every `@AiService` in `AUTOMATIC` wiring mode. Spring AI attaches tools per call, so they are scoped by default. In LangChain4j, scoping needs `wiringMode = EXPLICIT` + `tools = {"beanName"}`.
+- **Parameters instead of an input record.** The JSON schema is built from the method's parameters and their `@P` descriptions, so the `WeatherRequest` record from Spring AI goes away.
+- **The loop is inspectable.** `Result<T>.toolExecutions()` returns every call (request arguments, result, failure flag), and `intermediateResponses()` returns each model reply in between. Spring AI's advisor runs the loop and returns only the final response.
+- **Loop controls aren't in the starter.** `maxToolCallingRoundTrips` (default 100; `maxSequentialToolsInvocations` is deprecated in 1.20.2), `toolExecutionErrorHandler`, `toolArgumentsErrorHandler` and `hallucinatedToolNameStrategy` are builder-only. `@AiService` can't set them, so a module that needs them builds the service in `@Configuration`.
+- **Tool failures go to the model by default.** In synchronous AI Services, an exception thrown by the tool is sent to the model as the tool result, with a WARN log. Argument-parsing errors are rethrown instead. Async and reactive services use the opposite defaults.
+- **Observed run** (Sonnet 5.5, API Ninjas temporarily stubbed because the free plan rejects `city`/`country`):
+  - One question costs two model calls. The first replies `stop_reason: tool_use` with no thinking (0 thinking tokens). The second resends the history plus the `tool_result` and answers after thinking.
+  - Lviv: 553 + 725 input tokens, 77 + 543 output tokens.
+  - "Compare Lviv and Kyiv" came back as **parallel tool use**: two `tool_use` blocks in one reply. LangChain4j ran both and sent both `tool_result`s in a single message, so it was still two calls (556 + 948 input, 152 + 1117 output).
+  - Local sunrise and sunset were converted correctly (EEST, UTC+3).
+  - No `thinking`-block 400: the tool-call replies carried no thinking, so there was nothing to resend.
+- **The programmatic form is the same contract.** `ToolSpecification` (name, description, `JsonObjectSchema`) + `ToolExecutor` (raw JSON arguments in, string out) is LangChain4j's counterpart of `FunctionToolCallback`. `ProgrammaticToolsTest` drives it with a scripted stub `ChatModel`, so the whole loop is tested without an API key.
+
 ## Gaps and strengths
 
 ### Only / better in Spring AI
 
 - Per-call Anthropic options: thinking display and effort, with a typed `effort` (prompt-engineering)
 - Few-shot message pairs inside the high-level API (prompt-engineering)
+- Tools scoped per call by default (functions)
 
 ### Only / better in LangChain4j
 
 - Cache-miss diagnostics (`returnCacheDiagnostics`, `cacheMissReasonType()`) (prompt-engineering)
 - Models and AI Services usable without a Spring context (prompt-engineering)
+- Tool calls returned with the answer (`Result.toolExecutions()`), plus pluggable tool-error handlers (functions)
 
 ## Setup notes
 

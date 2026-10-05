@@ -33,6 +33,9 @@ Plain Q&A, prompt templates and structured output through one `@AiService` inter
 ### prompt-engineering
 Prompt-design techniques as live JUnit tests, ported from spring-ai-examples: system prompts, few-shot examples, XML documents-first prompts, native structured output, prompt caching, and adaptive thinking with effort. The tests are plain JUnit with no Spring context, and each builds the Claude model it needs. This module has no endpoints; run `../mvnw test` from `prompt-engineering` (needs `ANTHROPIC_API_KEY`; tests are skipped without it).
 
+### functions
+Tool calling: a weather `@Tool` method (`WeatherTools`, backed by the API Ninjas `WeatherClient`) that the starter wires automatically into the `WeatherAssistant` AI Service. The model fetches live weather and converts sunrise and sunset to local time. `POST /weather/tool-calls` is LangChain4j-only: it also returns each tool call via `Result.toolExecutions()`. `ProgrammaticToolsTest` shows the `ToolSpecification` + `ToolExecutor` form, the round-trip cap and a custom error handler against a stub model, with no API key needed. Needs `ANTHROPIC_API_KEY` and `API_NINJAS_API_KEY`.
+
 ## Usage
 
 Each module can be run independently:
@@ -52,4 +55,11 @@ curl -X POST http://localhost:8080/ask/result -H 'Content-Type: application/json
 curl 'http://localhost:8080/capital?country=France'
 curl 'http://localhost:8080/capital/details?country=France'
 curl 'http://localhost:8080/capitals?region=Scandinavia'
+```
+
+### functions (port 8080)
+
+```bash
+curl -X POST http://localhost:8080/weather -H 'Content-Type: application/json' -d '{"question": "What is the weather in Lviv, Ukraine? When are sunrise and sunset?"}'
+curl -X POST http://localhost:8080/weather/tool-calls -H 'Content-Type: application/json' -d '{"question": "Compare the current weather in Lviv, Ukraine and Kyiv, Ukraine."}'
 ```
