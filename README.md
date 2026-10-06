@@ -36,6 +36,9 @@ Prompt-design techniques as live JUnit tests, ported from spring-ai-examples: sy
 ### functions
 Tool calling: a weather `@Tool` method (`WeatherTools`, backed by the API Ninjas `WeatherClient`) that the starter wires automatically into the `WeatherAssistant` AI Service. The model fetches live weather and converts sunrise and sunset to local time. `POST /weather/tool-calls` is LangChain4j-only: it also returns each tool call via `Result.toolExecutions()`. `ProgrammaticToolsTest` shows the `ToolSpecification` + `ToolExecutor` form, the round-trip cap and a custom error handler against a stub model, with no API key needed. Needs `ANTHROPIC_API_KEY` and `API_NINJAS_API_KEY`.
 
+### rag
+Retrieval-augmented generation over the same documents as spring-ai-examples (a tow-vehicle list and four Yamaha boat performance bulletins). On every start, the documents are parsed with Apache Tika, split into segments of about 256 tokens, embedded in-process with all-MiniLM-L6-v2, and kept in an `InMemoryEmbeddingStore` on the heap, which is lost on shutdown. `POST /ask` does RAG by hand (`ManualRagService`: search → template → `ChatModel`). `POST /ask/augmented` is LangChain4j-only: the `RagAssistant` AI Service gets the starter's auto-configured `ContentRetriever`, so retrieval happens inside the proxy. Under the `prod` profile, segments go to Milvus (`docker compose up -d` in `rag/` first). Needs `ANTHROPIC_API_KEY`.
+
 ## Usage
 
 Each module can be run independently:
@@ -62,4 +65,17 @@ curl 'http://localhost:8080/capitals?region=Scandinavia'
 ```bash
 curl -X POST http://localhost:8080/weather -H 'Content-Type: application/json' -d '{"question": "What is the weather in Lviv, Ukraine? When are sunrise and sunset?"}'
 curl -X POST http://localhost:8080/weather/tool-calls -H 'Content-Type: application/json' -d '{"question": "Compare the current weather in Lviv, Ukraine and Kyiv, Ukraine."}'
+```
+
+### rag (port 8080)
+
+```bash
+curl -X POST http://localhost:8080/ask -H 'Content-Type: application/json' -d '{"question": "What is a good truck to pull a Sportsman 232 boat?"}'
+curl -X POST http://localhost:8080/ask/augmented -H 'Content-Type: application/json' -d '{"question": "What is a good truck to pull a Sportsman 232 boat?"}'
+```
+
+With Milvus (`prod` profile):
+
+```bash
+cd rag && docker compose up -d && ../mvnw spring-boot:run -Dspring-boot.run.profiles=prod
 ```

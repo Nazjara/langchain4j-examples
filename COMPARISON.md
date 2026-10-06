@@ -25,6 +25,7 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 | `basics` | `AiService` interface + hand-written `AiServiceImpl` over `ChatClient`; `.entity(...)` / `ParameterizedTypeReference`; `.st` templates | `@AiService` interface only (generated proxy); return type drives the schema; `@UserMessage(fromResource)` + `@V`; `Result<T>` for metadata | One class fewer. Native JSON-schema output needs a hand-built `ChatModel` (`supportedCapabilities`) because the starter can't declare capabilities |
 | `prompt-engineering` | `@SpringBootTest` + `ChatClient`; system, messages, options and `.entity(...)` all set per call | Plain JUnit, no Spring context; test-local AI Service interfaces built with `AiServices.create(...)`; few-shot drops to `ChatModel.chat(messages)` | Thinking display and effort are model-level, so each variant is its own model. Effort has no typed setter (`customParameters`) |
 | `functions` | `Function<WeatherRequest, WeatherResponse>` wrapped in `FunctionToolCallback`, passed per call with `.tools(...)`; loop run by the auto-registered `ToolCallingAdvisor` | `@Tool` method on a `@Component`, auto-discovered and wired into every `@AiService`; loop runs inside the AI Service proxy; `Result.toolExecutions()` exposes each call | Schema comes from the method parameters (`@P`), not an input record. Round-trip cap and error handlers exist only on `AiServices.builder(...)`, not in the starter |
+| `rag` | `SimpleVectorStore` (JSON file) or auto-configured Milvus `VectorStore`; `TikaDocumentReader` → `TokenTextSplitter` → `vectorStore.add`; manual `similaritySearch` → `.st` template → `ChatClient` | `InMemoryEmbeddingStore` (heap only, re-ingested on each start) or hand-built `MilvusV2EmbeddingStore`; `ApacheTikaDocumentParser` → `EmbeddingStoreIngestor` (recursive splitter + `EmbeddingModel` + store); manual path plus an `@AiService` with the auto-configured `ContentRetriever` | The store and the embedding model are separate objects. Declarative RAG is a proxy slot (`DefaultRetrievalAugmentor`), where Spring AI uses an advisor |
 
 ### basics: what felt different
 
@@ -62,6 +63,17 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
   - No `thinking`-block 400: the tool-call replies carried no thinking, so there was nothing to resend.
 - **The programmatic form is the same contract.** `ToolSpecification` (name, description, `JsonObjectSchema`) + `ToolExecutor` (raw JSON arguments in, string out) is LangChain4j's counterpart of `FunctionToolCallback`. `ProgrammaticToolsTest` drives it with a scripted stub `ChatModel`, so the whole loop is tested without an API key.
 
+### rag: what felt different
+
+- **The store doesn't embed.** Spring AI's `VectorStore.add`/`similaritySearch` call the embedding model internally. A LangChain4j `EmbeddingStore` only accepts vectors, so the `EmbeddingModel` is passed to the ingestor and the retriever separately, and the manual path embeds the question itself.
+- **The in-memory store is not saved to a file (deliberate difference).** Spring AI's module saves `SimpleVectorStore` to a JSON file and reloads it at startup, which makes an in-memory store look persistent. Here the store lives only on the heap and is re-ingested on every start (a few seconds), so Milvus is the only store that persists. `InMemoryEmbeddingStore.serializeToFile`/`fromFile` would offer the same snapshot trick.
+- **Two types instead of one.** A `Document` is the parsed file and a `TextSegment` is an embeddable chunk. Spring AI uses `Document` for both.
+- **RAG with zero wiring.** Once `EmbeddingModel` and `EmbeddingStore` beans exist, the starter's `RagAutoConfiguration` creates an `EmbeddingStoreContentRetriever` (`langchain4j.rag.retrieval.max-results`/`min-score`), and every `@AiService` picks it up. Spring AI needs a `QuestionAnswerAdvisor` added to the `ChatClient`.
+- **Different injected prompt.** The augmented path appends segments to the user message under LangChain4j's default "Answer using the following information:" (`DefaultContentInjector`), not the module's template. Changing it means building a `DefaultRetrievalAugmentor` with a custom `ContentInjector`, which the starter can't do.
+- **The embedding model ships in a jar.** `langchain4j-embeddings-all-minilm-l6-v2` bundles the ONNX model and tokenizer. Spring AI's transformers starter downloads them on first use.
+- **Token-sized splitting needs an explicit estimator.** `DocumentSplitters.recursive(256, 32, new HuggingFaceTokenCountEstimator())` measures in MiniLM tokens. Without an estimator, the sizes are characters.
+- **Milvus has no Boot starter.** The store is built in `@Configuration` from custom `ai.rag.milvus.*` properties. The v1 `MilvusEmbeddingStore` is deprecated in favour of `langchain4j-milvus-v2`'s `MilvusV2EmbeddingStore`. The collection is `langchain4j_minilm`, because the two libraries use different field layouts.
+
 ## Gaps and strengths
 
 ### Only / better in Spring AI
@@ -69,12 +81,14 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 - Per-call Anthropic options: thinking display and effort, with a typed `effort` (prompt-engineering)
 - Few-shot message pairs inside the high-level API (prompt-engineering)
 - Tools scoped per call by default (functions)
+- Milvus auto-configured from properties (rag)
 
 ### Only / better in LangChain4j
 
 - Cache-miss diagnostics (`returnCacheDiagnostics`, `cacheMissReasonType()`) (prompt-engineering)
 - Models and AI Services usable without a Spring context (prompt-engineering)
 - Tool calls returned with the answer (`Result.toolExecutions()`), plus pluggable tool-error handlers (functions)
+- Declarative RAG auto-wired from two beans; embedding model bundled in a jar (rag)
 
 ## Setup notes
 

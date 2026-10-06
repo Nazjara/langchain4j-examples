@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Multi-module Maven showcase of LangChain4j features, a side-by-side counterpart of `../spring-ai-examples` (Spring AI 2.0). Java 25, Spring Boot 4.1, LangChain4j 1.20.2. Chat runs on Claude (Anthropic); OpenAI is used only where Anthropic has no equivalent (image generation, TTS). Each module is an independent Spring Boot app.
+Multi-module Maven showcase of LangChain4j features, using the sample domains of `../spring-ai-examples` (Spring AI 2.0) as material. Java 25, Spring Boot 4.1, LangChain4j 1.20.2. Chat runs on Claude (Anthropic); OpenAI is used only where Anthropic has no equivalent (image generation, TTS). Each module is an independent Spring Boot app.
 
 The user is new to LangChain4j. `PLAN.md` is the roadmap: follow its per-phase workflow (lesson → build → run → compare → checkpoint) and tick its §6 verify-checklist as APIs are confirmed against the jars.
 
@@ -22,12 +22,13 @@ Root `pom.xml` is the parent: Spring Boot parent, `langchain4j-bom` (`langchain4
 | `basics` | `POST /ask`, `POST /ask/result`, `GET /capital`, `GET /capital/details`, `GET /capitals` | `@AiService`, `@UserMessage(fromResource)`, `@V`, return-type structured output, `Result<T>`, custom `ChatModel` with `RESPONSE_FORMAT_JSON_SCHEMA` |
 | `prompt-engineering` | Tests only (no endpoints, no Spring context) | Test-local AI Services via `AiServices.create`, `@SystemMessage`, `Result<T>.finalResponse()`, Anthropic thinking/effort/caching, few-shot via `ChatModel.chat(messages)` |
 | `functions` | `POST /weather`, `POST /weather/tool-calls` | `@Tool`/`@P` bean auto-wired into `@AiService`, `Result.toolExecutions()`; stub-model test for `ToolSpecification` + `ToolExecutor`, `maxToolCallingRoundTrips`, `toolExecutionErrorHandler` |
+| `rag` | `POST /ask`, `POST /ask/augmented` | `ApacheTikaDocumentParser` → `EmbeddingStoreIngestor`, `InMemoryEmbeddingStore` (file) / `MilvusV2EmbeddingStore` (`prod`), local MiniLM, manual search → `PromptTemplate` → `ChatModel`, starter-auto-wired `ContentRetriever` in `@AiService` |
 
 Package convention per module (`com.nazjara`): `rest/QuestionController`, `service/` (`@AiService` interfaces; `AiServiceImpl` only when there is real orchestration), `model/` records, `configuration/`, `bootstrap/`, `tool/`.
 
 ## Conventions
 
-- Mirror the matching `spring-ai-examples` module: same module name, endpoints, request/response records and env vars, so differences come from the framework only.
+- Explore LangChain4j, don't port Spring AI: design each module around LangChain4j's own capabilities and its idiomatic path. Reuse the matching `spring-ai-examples` module's name, sample data, prompts and env vars where convenient, but never add endpoints, layers or workarounds just to match its shape. `COMPARISON.md` records differences as a by-product.
 - Claude models: `claude-sonnet-5-5` is the minimum; never Haiku, even where the Spring AI module uses it.
 - A module that defines its own `ChatModel` bean (e.g. `basics`, for native JSON-schema output) reads its settings from `ai.anthropic.*`, not `langchain4j.anthropic.chat-model.*`: setting the starter's `api-key` registers a second `ChatModel` and breaks `@AiService` wiring.
 - Java records for DTOs; Lombok for `@Slf4j` / `@RequiredArgsConstructor`. Record fields the model fills get `@Description`.

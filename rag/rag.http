@@ -1,0 +1,17 @@
+@host = http://localhost:8080
+
+### Manual RAG: retrieve -> template -> ChatModel
+POST {{host}}/ask
+Content-Type: application/json
+
+{
+  "question": "What is a good truck to pull a Sportsman 232 boat?"
+}
+
+### Same question through the AI Service's retrieval augmentor (LangChain4j-only)
+POST {{host}}/ask/augmented
+Content-Type: application/json
+
+{
+  "question": "What is a good truck to pull a Sportsman 232 boat?"
+}

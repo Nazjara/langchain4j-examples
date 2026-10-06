@@ -21,6 +21,7 @@
         <module>basics</module>
         <module>prompt-engineering</module>
         <module>functions</module>
+        <module>rag</module>
     </modules>
 
     <properties>
