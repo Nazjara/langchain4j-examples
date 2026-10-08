@@ -39,6 +39,9 @@ Tool calling: a weather `@Tool` method (`WeatherTools`, backed by the API Ninjas
 ### rag
 Retrieval-augmented generation over the same documents as spring-ai-examples (a tow-vehicle list and four Yamaha boat performance bulletins). On every start, the documents are parsed with Apache Tika, split into segments of about 256 tokens, embedded in-process with all-MiniLM-L6-v2, and kept in an `InMemoryEmbeddingStore` on the heap, which is lost on shutdown. `POST /ask` does RAG by hand (`ManualRagService`: search → template → `ChatModel`). `POST /ask/augmented` is LangChain4j-only: the `RagAssistant` AI Service gets the starter's auto-configured `ContentRetriever`, so retrieval happens inside the proxy. Under the `prod` profile, segments go to Milvus (`docker compose up -d` in `rag/` first). Needs `ANTHROPIC_API_KEY`.
 
+### chat-memory
+One conversation per id: `ChatAssistant` takes a `@MemoryId`, and the starter wires in a `ChatMemoryProvider` that builds a 20-message `MessageWindowChatMemory` for each id. Messages persist in PostgreSQL through LangChain4j's `SQLChatMemoryStore` (`langchain4j-community-sql`), one JSON row per conversation. Boot's Docker Compose support starts the database automatically. `POST /chat/{id}` answers in one response. `POST /chat/{id}/stream` returns the same answer as Server-Sent Events through the AI Service's `Flux<String>` method; the reply is stored when the model's stream completes. Closing the connection doesn't stop the Anthropic call in LangChain4j 1.20.2. `GET /chat/{id}` shows the stored window and `DELETE /chat/{id}` clears it. `MemoryWindowTest` shows the window and per-id isolation against a stub model, with no API key or database needed. Needs `ANTHROPIC_API_KEY` and Docker. Boot looks for `compose.yaml` in the working directory, so an IntelliJ run configuration needs its working directory set to `$MODULE_WORKING_DIR$`.
+
 ## Usage
 
 Each module can be run independently:
@@ -78,4 +81,13 @@ With Milvus (`prod` profile):
 
 ```bash
 cd rag && docker compose up -d && ../mvnw spring-boot:run -Dspring-boot.run.profiles=prod
+```
+
+### chat-memory (port 8080)
+
+```bash
+curl -X POST http://localhost:8080/chat/42 -H 'Content-Type: application/json' -d '{"question": "Hi, my name is Nazar and I live in Lviv."}'
+curl -N -X POST http://localhost:8080/chat/42/stream -H 'Content-Type: application/json' -d '{"question": "What is my name?"}'
+curl http://localhost:8080/chat/42
+curl -X DELETE http://localhost:8080/chat/42
 ```

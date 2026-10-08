@@ -1,0 +1,44 @@
+@host = http://localhost:8080
+
+### Turn 1 (blocking)
+POST {{host}}/chat/42
+Content-Type: application/json
+
+{
+  "question": "Hi, my name is Nazar and I live in Lviv."
+}
+
+### Turn 2 (streaming, SSE): answered from turn 1's memory
+POST {{host}}/chat/42/stream
+Content-Type: application/json
+Accept: text/event-stream
+
+{
+  "question": "What is my name, and what is a good place to visit in my city?"
+}
+
+### Stored window for the conversation (what the model sees next turn)
+GET {{host}}/chat/42
+
+### Another conversation knows nothing about 42
+POST {{host}}/chat/7
+Content-Type: application/json
+
+{
+  "question": "What is my name?"
+}
+
+### Long streamed answer: cancel it midway; the server keeps receiving it from Anthropic and stores the full reply
+POST {{host}}/chat/99/stream
+Content-Type: application/json
+Accept: text/event-stream
+
+{
+  "question": "Write a detailed 1500-word history of Lviv."
+}
+
+### Stored window for conversation 99
+GET {{host}}/chat/99
+
+### Clear conversation 42
+DELETE {{host}}/chat/42

@@ -26,6 +26,23 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 | `prompt-engineering` | `@SpringBootTest` + `ChatClient`; system, messages, options and `.entity(...)` all set per call | Plain JUnit, no Spring context; test-local AI Service interfaces built with `AiServices.create(...)`; few-shot drops to `ChatModel.chat(messages)` | Thinking display and effort are model-level, so each variant is its own model. Effort has no typed setter (`customParameters`) |
 | `functions` | `Function<WeatherRequest, WeatherResponse>` wrapped in `FunctionToolCallback`, passed per call with `.tools(...)`; loop run by the auto-registered `ToolCallingAdvisor` | `@Tool` method on a `@Component`, auto-discovered and wired into every `@AiService`; loop runs inside the AI Service proxy; `Result.toolExecutions()` exposes each call | Schema comes from the method parameters (`@P`), not an input record. Round-trip cap and error handlers exist only on `AiServices.builder(...)`, not in the starter |
 | `rag` | `SimpleVectorStore` (JSON file) or auto-configured Milvus `VectorStore`; `TikaDocumentReader` → `TokenTextSplitter` → `vectorStore.add`; manual `similaritySearch` → `.st` template → `ChatClient` | `InMemoryEmbeddingStore` (heap only, re-ingested on each start) or hand-built `MilvusV2EmbeddingStore`; `ApacheTikaDocumentParser` → `EmbeddingStoreIngestor` (recursive splitter + `EmbeddingModel` + store); manual path plus an `@AiService` with the auto-configured `ContentRetriever` | The store and the embedding model are separate objects. Declarative RAG is a proxy slot (`DefaultRetrievalAugmentor`), where Spring AI uses an advisor |
+| `chat-memory` | `MessageWindowChatMemory` over `JdbcChatMemoryRepository` (one row per message) applied by `MessageChatMemoryAdvisor`; conversation id as an advisor param; `VectorStoreChatMemoryAdvisor` over pgvector; `.stream().content()` | `ChatMemoryProvider` bean → `MessageWindowChatMemory` per `@MemoryId`, over `SQLChatMemoryStore` (community, one JSON row per conversation); `Flux<String>` return type via `langchain4j-reactor` | The id is a typed method parameter. No vector memory. History and clear go through the store, because `ChatMemoryAccess` only sees the proxy's cache |
+
+### chat-memory: what felt different
+
+- **The conversation id is in the signature.** `chat(@MemoryId String id, @UserMessage String message)` can't be called without an id. Spring AI passes it as an untyped advisor parameter, and forgetting it silently falls back to a default conversation.
+- **Memory is a provider, not an advisor.** The proxy asks the `ChatMemoryProvider` once per id and caches the `ChatMemory`. That object holds no messages: every read goes to the `ChatMemoryStore`, so deleting from the store is enough to reset a conversation.
+- **The store keeps the window, not the log.** `SQLChatMemoryStore` upserts the whole message list as one JSON row per conversation, so evicted messages disappear from the database too. Spring AI's `JdbcChatMemoryRepository` uses one row per message, but its window rewrites the table the same way.
+- **The JDBC store is a community module.** It needs `langchain4j-community-sql` and the community BOM (`1.20.0-beta30`), and is built by hand from Boot's `DataSource`. Spring AI's `spring-ai-starter-model-chat-memory-repository-jdbc` auto-configures and initializes the schema.
+- **`ChatMemoryAccess` is cache-only (1.20.2).** An AI Service that extends it gets `getChatMemory(id)` and `evictChatMemory(id)`, but eviction only drops the cached object without clearing the store, and `getChatMemory` returns `null` for ids not used since startup. The module's history and clear endpoints call the store instead.
+- **A failed turn leaves its question behind.** The user message is written to memory before the model is called, so a call that fails (a 401 in the smoke test) leaves a stored `USER` message with no answer. The next turn sends two user messages in a row.
+- **Streaming is a return type.** Declaring `Flux<String>` switches the proxy to the `StreamingChatModel` bean, a separate bean with its own `langchain4j.anthropic.streaming-chat-model.*` properties. The answer is stored when the model's stream completes. Spring AI streams from the same `ChatClient` with `.stream()`.
+- **Cancelling the `Flux` doesn't cancel the model call (1.20.2).** `langchain4j-reactor`'s `TokenStreamToFluxAdapter` only uses `onPartialResponse(String)` and never calls `StreamingHandle.cancel()`. When the client disconnects, Anthropic keeps generating (and billing) to the end, and the full reply is still stored in memory (observed live; proven in `MemoryWindowTest`). The cancellation API does exist: `TokenStream.onPartialResponseWithContext` exposes the handle.
+- **Observed run** (Sonnet 5.5):
+  - Turn 2 resent the whole window: `system` as a separate field, then user, assistant, user in `messages`. Input grew from 60 to 137 tokens. `cache_read_input_tokens` was 0 on every call, and no request carried `cache_control`: LangChain4j 1.20.2 can mark only system messages and tools.
+  - Streaming: response headers arrived 0.78 s after the request, the first text delta 0.8 s after it, and the last one 2.2 s after it (141 output tokens, 0 thinking). Deltas were 1–30 characters, often starting with a space.
+  - Conversation 7 got only its own message and answered "I don't know your name yet". It was the only call that used adaptive thinking (39 tokens, empty thinking text with a signature).
+- **Vector memory is skipped.** LangChain4j has no counterpart of `VectorStoreChatMemoryAdvisor`, which recalls semantically similar past messages instead of the most recent ones.
 
 ### basics: what felt different
 
@@ -82,6 +99,7 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 - Few-shot message pairs inside the high-level API (prompt-engineering)
 - Tools scoped per call by default (functions)
 - Milvus auto-configured from properties (rag)
+- Vector chat memory (`VectorStoreChatMemoryAdvisor`); JDBC chat memory auto-configured with schema init (chat-memory)
 
 ### Only / better in LangChain4j
 
@@ -89,6 +107,7 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 - Models and AI Services usable without a Spring context (prompt-engineering)
 - Tool calls returned with the answer (`Result.toolExecutions()`), plus pluggable tool-error handlers (functions)
 - Declarative RAG auto-wired from two beans; embedding model bundled in a jar (rag)
+- Conversation id as a typed `@MemoryId` parameter (chat-memory)
 
 ## Setup notes
 

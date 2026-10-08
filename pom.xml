@@ -22,6 +22,7 @@
         <module>prompt-engineering</module>
         <module>functions</module>
         <module>rag</module>
+        <module>chat-memory</module>
     </modules>
 
     <properties>

@@ -23,6 +23,7 @@ Root `pom.xml` is the parent: Spring Boot parent, `langchain4j-bom` (`langchain4
 | `prompt-engineering` | Tests only (no endpoints, no Spring context) | Test-local AI Services via `AiServices.create`, `@SystemMessage`, `Result<T>.finalResponse()`, Anthropic thinking/effort/caching, few-shot via `ChatModel.chat(messages)` |
 | `functions` | `POST /weather`, `POST /weather/tool-calls` | `@Tool`/`@P` bean auto-wired into `@AiService`, `Result.toolExecutions()`; stub-model test for `ToolSpecification` + `ToolExecutor`, `maxToolCallingRoundTrips`, `toolExecutionErrorHandler` |
 | `rag` | `POST /ask`, `POST /ask/augmented` | `ApacheTikaDocumentParser` → `EmbeddingStoreIngestor`, `InMemoryEmbeddingStore` (file) / `MilvusV2EmbeddingStore` (`prod`), local MiniLM, manual search → `PromptTemplate` → `ChatModel`, starter-auto-wired `ContentRetriever` in `@AiService` |
+| `chat-memory` | `POST /chat/{id}`, `POST /chat/{id}/stream` (SSE), `GET /chat/{id}`, `DELETE /chat/{id}` | `@MemoryId`, `ChatMemoryProvider` → `MessageWindowChatMemory`, community `SQLChatMemoryStore` on Postgres (Boot Docker Compose), `Flux<String>` via `langchain4j-reactor` + `StreamingChatModel` |
 
 Package convention per module (`com.nazjara`): `rest/QuestionController`, `service/` (`@AiService` interfaces; `AiServiceImpl` only when there is real orchestration), `model/` records, `configuration/`, `bootstrap/`, `tool/`.
 

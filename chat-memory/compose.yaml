@@ -1,0 +1,13 @@
+# Explicit project name: the default (the directory name) would collide with spring-ai-examples' chat-memory
+name: langchain4j-chat-memory
+
+services:
+  postgres:
+    container_name: langchain4j-chat-memory-postgres
+    image: postgres:17
+    environment:
+      - POSTGRES_DB=chatmemory
+      - POSTGRES_USER=chatmemory
+      - POSTGRES_PASSWORD=chatmemory
+    ports:
+      - "5432"
