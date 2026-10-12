@@ -34,3 +34,7 @@ build/
 
 ### Milvus docker data ###
 rag/volumes/
+
+### Files saved by the .http requests ###
+image/generated.png
+audio/speech.mp3

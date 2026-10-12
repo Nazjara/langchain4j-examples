@@ -42,6 +42,12 @@ Retrieval-augmented generation over the same documents as spring-ai-examples (a 
 ### chat-memory
 One conversation per id: `ChatAssistant` takes a `@MemoryId`, and the starter wires in a `ChatMemoryProvider` that builds a 20-message `MessageWindowChatMemory` for each id. Messages persist in PostgreSQL through LangChain4j's `SQLChatMemoryStore` (`langchain4j-community-sql`), one JSON row per conversation. Boot's Docker Compose support starts the database automatically. `POST /chat/{id}` answers in one response. `POST /chat/{id}/stream` returns the same answer as Server-Sent Events through the AI Service's `Flux<String>` method; the reply is stored when the model's stream completes. Closing the connection doesn't stop the Anthropic call in LangChain4j 1.20.2. `GET /chat/{id}` shows the stored window and `DELETE /chat/{id}` clears it. `MemoryWindowTest` shows the window and per-id isolation against a stub model, with no API key or database needed. Needs `ANTHROPIC_API_KEY` and Docker. Boot looks for `compose.yaml` in the working directory, so an IntelliJ run configuration needs its working directory set to `$MODULE_WORKING_DIR$`.
 
+### image
+Two kinds of model in one app. `POST /image` generates a picture with OpenAI's `gpt-image-1` through LangChain4j's `ImageModel`, which the OpenAI starter builds from `langchain4j.open-ai.image-model.*`; the image comes back as base64 and is returned as PNG. `POST /vision` takes a multipart upload and asks Claude to describe it: the `VisionAssistant` AI Service has an `ImageContent` parameter, which the proxy sends as an image block next to the prompt text. `QuestionControllerTest` runs both endpoints against stub models and shows the exact user message, with no API key needed. Needs `ANTHROPIC_API_KEY` for `POST /vision` and `OPENAI_API_KEY` for `POST /image` (OpenAI may require a verified organization for `gpt-image-1`); each endpoint works with its own key alone. The module's pom excludes LangChain4j's JDK HTTP client, because the Anthropic and OpenAI starters otherwise fail at startup with "multiple HTTP clients".
+
+### audio
+Text-to-speech: `POST /audio` turns text into MP3 with OpenAI's `gpt-4o-mini-tts` through LangChain4j's `TextToSpeechModel`. The OpenAI starter has no text-to-speech properties, so `TextToSpeechModelConfig` builds the model by hand from `ai.openai.*`. Only the model, the text and the voice can be set; speed, speaking instructions and the audio format cannot. Needs `OPENAI_API_KEY` only.
+
 ## Usage
 
 Each module can be run independently:
@@ -90,4 +96,17 @@ curl -X POST http://localhost:8080/chat/42 -H 'Content-Type: application/json' -
 curl -N -X POST http://localhost:8080/chat/42/stream -H 'Content-Type: application/json' -d '{"question": "What is my name?"}'
 curl http://localhost:8080/chat/42
 curl -X DELETE http://localhost:8080/chat/42
+```
+
+### image (port 8080)
+
+```bash
+curl -X POST http://localhost:8080/image -H 'Content-Type: application/json' -d '{"question": "A pickup truck towing a boat along a coastal road at sunset"}' -o generated.png
+curl -X POST http://localhost:8080/vision -F 'file=@image/src/test/resources/sample.png;type=image/png'
+```
+
+### audio (port 8080)
+
+```bash
+curl -X POST http://localhost:8080/audio -H 'Content-Type: application/json' -d '{"question": "Welcome aboard. Today we are towing a boat to the coast."}' -o speech.mp3
 ```

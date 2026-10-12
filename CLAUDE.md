@@ -8,7 +8,7 @@ The user is new to LangChain4j. `PLAN.md` is the roadmap: follow its per-phase w
 
 - Build all: `./mvnw clean install` (tests hit live model APIs — use `-DskipTests` when no key/credits). Needs JDK 25: the shell default may be 21, so prefix with `JAVA_HOME=/usr/lib/jvm/openjdk-25`.
 - Run a module: `cd <module> && ../mvnw spring-boot:run`
-- Required env: `ANTHROPIC_API_KEY` (all modules except `audio` and `mcp-server`); `OPENAI_API_KEY` for `image` and `audio`; `API_NINJAS_API_KEY` for `functions` and `mcp-server`
+- Required env: `ANTHROPIC_API_KEY` (all modules except `audio` and `mcp-server`); `OPENAI_API_KEY` for `audio` and for `image`'s `POST /image` only (`image` starts without it, so `POST /vision` works on the Anthropic key alone); `API_NINJAS_API_KEY` for `functions` and `mcp-server`
 
 ## Layout
 
@@ -24,6 +24,8 @@ Root `pom.xml` is the parent: Spring Boot parent, `langchain4j-bom` (`langchain4
 | `functions` | `POST /weather`, `POST /weather/tool-calls` | `@Tool`/`@P` bean auto-wired into `@AiService`, `Result.toolExecutions()`; stub-model test for `ToolSpecification` + `ToolExecutor`, `maxToolCallingRoundTrips`, `toolExecutionErrorHandler` |
 | `rag` | `POST /ask`, `POST /ask/augmented` | `ApacheTikaDocumentParser` → `EmbeddingStoreIngestor`, `InMemoryEmbeddingStore` (file) / `MilvusV2EmbeddingStore` (`prod`), local MiniLM, manual search → `PromptTemplate` → `ChatModel`, starter-auto-wired `ContentRetriever` in `@AiService` |
 | `chat-memory` | `POST /chat/{id}`, `POST /chat/{id}/stream` (SSE), `GET /chat/{id}`, `DELETE /chat/{id}` | `@MemoryId`, `ChatMemoryProvider` → `MessageWindowChatMemory`, community `SQLChatMemoryStore` on Postgres (Boot Docker Compose), `Flux<String>` via `langchain4j-reactor` + `StreamingChatModel` |
+| `image` | `POST /image`, `POST /vision` (multipart) | OpenAI starter's `ImageModel` (`gpt-image-1`, `langchain4j.open-ai.image-model.*`), `ImageContent` parameter on an `@AiService` method (Claude vision); stub-model test for the assembled `UserMessage` |
+| `audio` | `POST /audio` | Hand-built `OpenAiTextToSpeechModel` (`@Experimental`, no starter properties, `ai.openai.*`), `TextToSpeechModel.synthesize` |
 
 Package convention per module (`com.nazjara`): `rest/QuestionController`, `service/` (`@AiService` interfaces; `AiServiceImpl` only when there is real orchestration), `model/` records, `configuration/`, `bootstrap/`, `tool/`.
 
@@ -32,6 +34,8 @@ Package convention per module (`com.nazjara`): `rest/QuestionController`, `servi
 - Explore LangChain4j, don't port Spring AI: design each module around LangChain4j's own capabilities and its idiomatic path. Reuse the matching `spring-ai-examples` module's name, sample data, prompts and env vars where convenient, but never add endpoints, layers or workarounds just to match its shape. `COMPARISON.md` records differences as a by-product.
 - Claude models: `claude-sonnet-5-5` is the minimum; never Haiku, even where the Spring AI module uses it.
 - A module that defines its own `ChatModel` bean (e.g. `basics`, for native JSON-schema output) reads its settings from `ai.anthropic.*`, not `langchain4j.anthropic.chat-model.*`: setting the starter's `api-key` registers a second `ChatModel` and breaks `@AiService` wiring.
+- A module that combines the Anthropic and OpenAI starters (e.g. `image`) must exclude `langchain4j-http-client-jdk` from both: the OpenAI starter adds the Spring RestClient HTTP client, and the Anthropic starter's model then fails at startup with "Conflict: multiple HTTP clients".
+- OpenAI image models: use `gpt-image-*`; the DALL·E constants in `OpenAiImageModelName` are deprecated.
 - Java records for DTOs; Lombok for `@Slf4j` / `@RequiredArgsConstructor`. Record fields the model fills get `@Description`.
 - Educational project: Javadoc every class and public method in the API (`rest/`), service, client and config/bootstrap layers. Explain *what LangChain4j does under the hood* (AI Service proxy, tool loop, retrieval augmentor, memory provider) and name the Spring AI equivalent. Models/records don't need it. Verify with `./mvnw javadoc:javadoc -Ddoclint=all,-missing -Dshow=private`.
 - Prompt templates live in `src/main/resources/prompts/*.txt` using LangChain4j `{{var}}` syntax, referenced via `@SystemMessage`/`@UserMessage(fromResource = "/prompts/...")`.

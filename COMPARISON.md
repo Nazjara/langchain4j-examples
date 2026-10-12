@@ -27,6 +27,25 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 | `functions` | `Function<WeatherRequest, WeatherResponse>` wrapped in `FunctionToolCallback`, passed per call with `.tools(...)`; loop run by the auto-registered `ToolCallingAdvisor` | `@Tool` method on a `@Component`, auto-discovered and wired into every `@AiService`; loop runs inside the AI Service proxy; `Result.toolExecutions()` exposes each call | Schema comes from the method parameters (`@P`), not an input record. Round-trip cap and error handlers exist only on `AiServices.builder(...)`, not in the starter |
 | `rag` | `SimpleVectorStore` (JSON file) or auto-configured Milvus `VectorStore`; `TikaDocumentReader` → `TokenTextSplitter` → `vectorStore.add`; manual `similaritySearch` → `.st` template → `ChatClient` | `InMemoryEmbeddingStore` (heap only, re-ingested on each start) or hand-built `MilvusV2EmbeddingStore`; `ApacheTikaDocumentParser` → `EmbeddingStoreIngestor` (recursive splitter + `EmbeddingModel` + store); manual path plus an `@AiService` with the auto-configured `ContentRetriever` | The store and the embedding model are separate objects. Declarative RAG is a proxy slot (`DefaultRetrievalAugmentor`), where Spring AI uses an advisor |
 | `chat-memory` | `MessageWindowChatMemory` over `JdbcChatMemoryRepository` (one row per message) applied by `MessageChatMemoryAdvisor`; conversation id as an advisor param; `VectorStoreChatMemoryAdvisor` over pgvector; `.stream().content()` | `ChatMemoryProvider` bean → `MessageWindowChatMemory` per `@MemoryId`, over `SQLChatMemoryStore` (community, one JSON row per conversation); `Flux<String>` return type via `langchain4j-reactor` | The id is a typed method parameter. No vector memory. History and clear go through the store, because `ChatMemoryAccess` only sees the proxy's cache |
+| `image` | `OpenAiImageModel.call(new ImagePrompt(text, options))` with DALL·E 3 and per-call `OpenAiImageOptions`; vision through a `Media` attached to a hand-built `UserMessage` passed to `ChatClient`; unused OpenAI models switched off with `spring.ai.model.*=none` | `ImageModel.generate(String)` on the starter's `OpenAiImageModel` (`gpt-image-1`, options fixed in `langchain4j.open-ai.image-model.*`); vision through an `ImageContent` parameter on an `@AiService` method | Each OpenAI bean needs its own `api-key`, so nothing has to be switched off. The Anthropic and OpenAI starters clash over the HTTP client until the JDK client is excluded |
+| `audio` | Auto-configured `TextToSpeechModel`; voice, speed, format and instructions per call in `OpenAiAudioSpeechOptions` | Hand-built `OpenAiTextToSpeechModel` (`@Experimental`, no starter properties); `synthesize(text)` sends model, input and voice only | Always MP3 at the default speed, with no speaking instructions |
+
+### image: what felt different
+
+- **Vision stays declarative.** `String describe(@UserMessage ImageContent image)` with a method-level `@UserMessage` template is the whole feature. The proxy builds one user message with the template text first and the image second (asserted in `QuestionControllerTest`). Spring AI needs a hand-built `UserMessage` with a `Media` and drops to `.messages(...)`.
+- **You encode the image yourself.** `Image` holds a URL or a base64 string and has no `byte[]` field, so the controller base64-encodes the upload. Spring AI's `Media` accepts a `Resource` and encodes it internally. The request on the wire is the same: an `image` block with a `base64` source.
+- **Image options belong to the bean.** `ImageModel.generate` takes only the prompt, so model, size, quality and output format come from `langchain4j.open-ai.image-model.*` and one bean means one configuration. Spring AI passes `OpenAiImageOptions` per call.
+- **No `style` or `response_format`.** LangChain4j 1.20.2 sends `model`, `prompt`, `n`, `size`, `quality`, `background`, `output_format`, `output_compression`, `moderation` and `user`. The DALL·E constants in `OpenAiImageModelName` are deprecated, so the module uses `gpt-image-1`, which always answers with base64. Spring AI's module used `dall-e-3` with `quality=hd` and `style=natural`.
+- **OpenAI beans are opt-in one by one.** The starter creates a model only when that model's own `api-key` property is set, so setting `image-model.api-key` adds no OpenAI `ChatModel` next to Claude. Spring AI enables every model of a starter by default and the module turns the others off with `spring.ai.model.*=none`.
+- **Two provider starters don't start together out of the box.** The OpenAI starter brings LangChain4j's Spring RestClient HTTP client and passes it to its own models. The Anthropic starter passes none, finds both that client and the JDK client on the classpath, and fails with "Conflict: multiple HTTP clients". The module's pom excludes `langchain4j-http-client-jdk`; the alternative is the `langchain4j.http.clientBuilderFactory` system property. Spring AI's two starters start together with no extra configuration.
+- **No usage on images.** `Response<Image>` carries no token usage in 1.20.2, and `revisedPrompt` is only filled when the API returns one.
+
+### audio: what felt different
+
+- **No starter support.** The OpenAI starter has no text-to-speech properties, so the model is built in `@Configuration` from `ai.openai.*`. Spring AI auto-configures it from the API key.
+- **Three request fields.** `OpenAiTextToSpeechModel` sends `model`, `input` and `voice`. `TextToSpeechRequest` can override the voice per call and nothing else. Speed, speaking instructions and the audio format are missing, so the Spring AI module's `speed(1.0)`, `responseFormat(MP3)` and `instructions("Calm, friendly narrator")` have no counterpart; the reply is always labelled `audio/mpeg`.
+- **Experimental API.** `TextToSpeechModel` and its request/response types are marked `@Experimental`, and input is capped at 4096 characters on the client side.
+- **Bytes, not base64.** OpenAI returns the audio as the HTTP body, so `Audio` exposes `binaryData()`. `Image` has no such field because images arrive inside JSON.
 
 ### chat-memory: what felt different
 
@@ -100,6 +119,8 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 - Tools scoped per call by default (functions)
 - Milvus auto-configured from properties (rag)
 - Vector chat memory (`VectorStoreChatMemoryAdvisor`); JDBC chat memory auto-configured with schema init (chat-memory)
+- Per-call image options; provider starters that start together without HTTP-client exclusions (image)
+- Text-to-speech auto-configured, with speed, format and speaking instructions (audio)
 
 ### Only / better in LangChain4j
 
@@ -108,6 +129,7 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 - Tool calls returned with the answer (`Result.toolExecutions()`), plus pluggable tool-error handlers (functions)
 - Declarative RAG auto-wired from two beans; embedding model bundled in a jar (rag)
 - Conversation id as a typed `@MemoryId` parameter (chat-memory)
+- Images as a typed AI Service parameter; OpenAI models enabled one by one, so no switching off (image)
 
 ## Setup notes
 

@@ -1,0 +1,11 @@
+@host = http://localhost:8080
+
+### Speak a text with OpenAI text-to-speech (saved next to this file as speech.mp3)
+POST {{host}}/audio
+Content-Type: application/json
+
+{
+  "question": "Welcome aboard. Today we are towing a boat to the coast, so please keep your seat belt fastened."
+}
+
+>>! speech.mp3

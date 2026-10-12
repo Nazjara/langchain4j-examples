@@ -23,6 +23,8 @@
         <module>functions</module>
         <module>rag</module>
         <module>chat-memory</module>
+        <module>image</module>
+        <module>audio</module>
     </modules>
 
     <properties>

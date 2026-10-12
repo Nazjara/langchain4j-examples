@@ -1,0 +1,22 @@
+@host = http://localhost:8080
+
+### Generate an image with OpenAI (saved next to this file as generated.png)
+POST {{host}}/image
+Content-Type: application/json
+
+{
+  "question": "A pickup truck towing a boat along a coastal road at sunset"
+}
+
+>>! generated.png
+
+### Describe an image with Claude vision (swap the path for ./generated.png to describe the image above)
+POST {{host}}/vision
+Content-Type: multipart/form-data; boundary=boundary
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="sample.png"
+Content-Type: image/png
+
+< ./src/test/resources/sample.png
+--boundary--
