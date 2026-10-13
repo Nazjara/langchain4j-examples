@@ -1,0 +1,1 @@
+When talking about weather, you'll receive sunrise and sunset as epoch time in GMT. Please determine the timezone where the city is located and provide the local time for sunrise and sunset in format HH:mm:ss. You can also explicitly mention the local timezone for a city.

@@ -8,7 +8,7 @@ Examples of using [LangChain4j](https://docs.langchain4j.dev) with Spring Boot, 
 - Maven (wrapper included)
 - Anthropic API key (Claude) — all chat features
 - OpenAI API key — only for image generation (`image`) and text-to-speech (`audio`)
-- API Ninjas key — only for `functions` and `mcp-server`
+- API Ninjas key — only for `functions`, `mcp-server` and `mcp-agent`
 - Docker — only for the `rag` `prod` profile (Milvus), `chat-memory` (PostgreSQL) and `observability-eval` (Grafana LGTM)
 
 ## Setup
@@ -47,6 +47,12 @@ Two kinds of model in one app. `POST /image` generates a picture with OpenAI's `
 
 ### audio
 Text-to-speech: `POST /audio` turns text into MP3 with OpenAI's `gpt-4o-mini-tts` through LangChain4j's `TextToSpeechModel`. The OpenAI starter has no text-to-speech properties, so `TextToSpeechModelConfig` builds the model by hand from `ai.openai.*`. Only the model, the text and the voice can be set; speed, speaking instructions and the audio format cannot. Needs `OPENAI_API_KEY` only.
+
+### mcp-server
+A Model Context Protocol server built with `langchain4j-community-mcp-server`. It publishes the `currentWeather` tool, declared with the same `@Tool` annotation an AI Service uses; `@Tool(metadata)` adds the MCP title and the read-only/idempotent hints. LangChain4j's server speaks stdio only and serves tools only: it has no HTTP transport, no resources, no prompts and no notifications. The app therefore has no web server and is not run on its own. An MCP client on the same machine starts the jar as a subprocess and talks to it over stdin and stdout; it cannot be reached over the network or shared between clients. Because of that, so the banner is off and all logging goes to stderr. `McpServerTest` drives the protocol handler directly and shows each response, including "Method not found" for resources, prompts and `ping`; no API key needed. Needs `API_NINJAS_API_KEY` at runtime.
+
+### mcp-agent
+The MCP client side, built with `langchain4j-mcp`. `McpClientConfig` starts the `mcp-server` jar as a subprocess (`StdioMcpTransport`), connects a `DefaultMcpClient`, and wraps it in an `McpToolProvider` that the starter wires into the `McpAssistant` AI Service. `POST /ask` lets Claude call the remote `currentWeather` tool; `GET /tools` lists what the server publishes. The tool list is fetched on the first AI Service call, not at startup, and cached afterwards. The remaining endpoints show the client's resource and prompt API (`GET /resources`, `POST /resources/ask`, `GET /prompts`, `POST /prompts/{name}`). They return HTTP 501 here, because LangChain4j's own server cannot serve resources or prompts; `McpServerGatewayTest` and `QuestionControllerTest` run them against a stubbed client instead. `StdioMcpClientTest` starts the real server jar and asserts what works and what is rejected. Build `mcp-server` first (`./mvnw -pl mcp-server package -DskipTests`); the jar path is `ai.mcp.server.jar`, found from either the repository root or the `mcp-agent` directory, so it works from IntelliJ and from `../mvnw spring-boot:run` alike. Needs `ANTHROPIC_API_KEY` and `API_NINJAS_API_KEY`.
 
 ## Usage
 
@@ -109,4 +115,22 @@ curl -X POST http://localhost:8080/vision -F 'file=@image/src/test/resources/sam
 
 ```bash
 curl -X POST http://localhost:8080/audio -H 'Content-Type: application/json' -d '{"question": "Welcome aboard. Today we are towing a boat to the coast."}' -o speech.mp3
+```
+
+### mcp-agent (port 8080)
+
+Starts `mcp-server` itself; build that module first.
+
+```bash
+curl -X POST http://localhost:8080/ask -H 'Content-Type: application/json' -d '{"question": "What is the weather in Lviv, Ukraine? When are sunrise and sunset?"}'
+curl http://localhost:8080/tools
+```
+
+These return 501, because LangChain4j's MCP server has no resources or prompts:
+
+```bash
+curl http://localhost:8080/resources
+curl -X POST http://localhost:8080/resources/ask -H 'Content-Type: application/json' -d '{"uri": "movies://Avatar", "question": "Who directed this movie?"}'
+curl http://localhost:8080/prompts
+curl -X POST http://localhost:8080/prompts/weather-report -H 'Content-Type: application/json' -d '{"city": "Lviv", "country": "Ukraine"}'
 ```

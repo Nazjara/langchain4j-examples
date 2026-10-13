@@ -1,0 +1,36 @@
+@host = http://localhost:8080
+
+### Weather question answered via the MCP server's currentWeather tool
+POST {{host}}/ask
+Content-Type: application/json
+
+{
+  "question": "What is the weather in Lviv, Ukraine? When are sunrise and sunset?"
+}
+
+### Tools the MCP server publishes (tools/list)
+GET {{host}}/tools
+
+### Resources the MCP server publishes (resources/list) - 501: LangChain4j's server has no resources
+GET {{host}}/resources
+
+### Question answered from an MCP resource (resources/read) - 501: LangChain4j's server has no resources
+POST {{host}}/resources/ask
+Content-Type: application/json
+
+{
+  "uri": "movies://Avatar",
+  "question": "Who directed this movie?"
+}
+
+### Prompts the MCP server publishes (prompts/list) - 501: LangChain4j's server has no prompts
+GET {{host}}/prompts
+
+### Run a server-side prompt (prompts/get) - 501: LangChain4j's server has no prompts
+POST {{host}}/prompts/weather-report
+Content-Type: application/json
+
+{
+  "city": "Lviv",
+  "country": "Ukraine"
+}

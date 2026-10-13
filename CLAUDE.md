@@ -8,7 +8,7 @@ The user is new to LangChain4j. `PLAN.md` is the roadmap: follow its per-phase w
 
 - Build all: `./mvnw clean install` (tests hit live model APIs — use `-DskipTests` when no key/credits). Needs JDK 25: the shell default may be 21, so prefix with `JAVA_HOME=/usr/lib/jvm/openjdk-25`.
 - Run a module: `cd <module> && ../mvnw spring-boot:run`
-- Required env: `ANTHROPIC_API_KEY` (all modules except `audio` and `mcp-server`); `OPENAI_API_KEY` for `audio` and for `image`'s `POST /image` only (`image` starts without it, so `POST /vision` works on the Anthropic key alone); `API_NINJAS_API_KEY` for `functions` and `mcp-server`
+- Required env: `ANTHROPIC_API_KEY` (all modules except `audio` and `mcp-server`); `OPENAI_API_KEY` for `audio` and for `image`'s `POST /image` only (`image` starts without it, so `POST /vision` works on the Anthropic key alone); `API_NINJAS_API_KEY` for `functions`, `mcp-server` and `mcp-agent` (the agent's `mcp-server` subprocess inherits it)
 
 ## Layout
 
@@ -26,6 +26,8 @@ Root `pom.xml` is the parent: Spring Boot parent, `langchain4j-bom` (`langchain4
 | `chat-memory` | `POST /chat/{id}`, `POST /chat/{id}/stream` (SSE), `GET /chat/{id}`, `DELETE /chat/{id}` | `@MemoryId`, `ChatMemoryProvider` → `MessageWindowChatMemory`, community `SQLChatMemoryStore` on Postgres (Boot Docker Compose), `Flux<String>` via `langchain4j-reactor` + `StreamingChatModel` |
 | `image` | `POST /image`, `POST /vision` (multipart) | OpenAI starter's `ImageModel` (`gpt-image-1`, `langchain4j.open-ai.image-model.*`), `ImageContent` parameter on an `@AiService` method (Claude vision); stub-model test for the assembled `UserMessage` |
 | `audio` | `POST /audio` | Hand-built `OpenAiTextToSpeechModel` (`@Experimental`, no starter properties, `ai.openai.*`), `TextToSpeechModel.synthesize` |
+| `mcp-server` | None (stdio MCP server, no web server; started by an MCP client as a subprocess) | `langchain4j-community-mcp-server`: `McpServer` over `@Tool` beans + `StdioMcpServerTransport`, tool title/hints via `@Tool(metadata)`; tools only, logs on stderr (`logback-spring.xml`) |
+| `mcp-agent` | `POST /ask`, `GET /tools`, `GET /resources`, `POST /resources/ask`, `GET /prompts`, `POST /prompts/{name}` | `langchain4j-mcp`: `StdioMcpTransport` → `DefaultMcpClient` → `McpToolProvider` auto-wired into `@AiService`; direct `readResource` / `getPrompt` + `McpPromptMessage.toChatMessage()` (501 against `mcp-server`, which has no resources or prompts) |
 
 Package convention per module (`com.nazjara`): `rest/QuestionController`, `service/` (`@AiService` interfaces; `AiServiceImpl` only when there is real orchestration), `model/` records, `configuration/`, `bootstrap/`, `tool/`.
 
@@ -45,3 +47,5 @@ Package convention per module (`com.nazjara`): `rest/QuestionController`, `servi
 - Each module has `<module>/<module>.http` (IntelliJ HTTP Client) with one request per endpoint, using a `@host` variable. This is how the user runs requests.
 - New feature = new module registered in root `<modules>`.
 - MCP naming: an app that calls MCP servers is named `*-agent`, never `*-client` or `*-host`.
+- MCP: LangChain4j's server (`langchain4j-community-mcp-server`) is stdio-only and serves tools only. `mcp-agent` starts the `mcp-server` jar as a subprocess (`ai.mcp.server.jar`), so build `mcp-server` first; `mcp-server`'s stdout is the protocol channel, so nothing there may log to stdout. JSON-RPC traffic is logged on the logger named `MCP`.
+- No Spring AI at runtime (Stage A): a module never connects to or depends on anything from `spring-ai-examples`. The user may revisit this for the Stage B MCP server (`PLAN.md` B6); ask then, don't assume. When LangChain4j lacks a piece, keep the LangChain4j side that exists, document the gap in Javadoc and `COMPARISON.md`, and move on.
