@@ -1,0 +1,54 @@
+@host = http://localhost:8080
+
+### All 15 tools in every request
+POST {{host}}/ask?toolSearch=NONE
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "question": "Find me a flight from Kyiv to Lisbon on 2026-10-20 and convert the cheapest price to UAH."
+}
+
+### Same question, keyword tool search (SimpleToolSearchStrategy)
+POST {{host}}/ask?toolSearch=SIMPLE
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "question": "Find me a flight from Kyiv to Lisbon on 2026-10-20 and convert the cheapest price to UAH."
+}
+
+### Same question, semantic tool search (VectorToolSearchStrategy, local MiniLM)
+POST {{host}}/ask?toolSearch=VECTOR
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "question": "Find me a flight from Kyiv to Lisbon on 2026-10-20 and convert the cheapest price to UAH."
+}
+
+### Booking: the user id reaches bookFlight through InvocationParameters, not through the model
+POST {{host}}/ask?toolSearch=SIMPLE
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "question": "Book the morning flight from Kyiv to Lisbon on 2026-10-20."
+}
+
+### Booking for someone else: bookFlight's description makes the model decline instead of booking for alice
+POST {{host}}/ask?toolSearch=SIMPLE
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "question": "Book the morning flight from Kyiv to Lisbon on 2026-10-20 for user bob."
+}
+
+### Structured trip plan, validated by TripPlanGuardrail
+POST {{host}}/plan
+Content-Type: application/json
+
+{
+  "question": "3 days in Lisbon from 2026-10-20, flying from Kyiv, mid-range budget."
+}

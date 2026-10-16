@@ -27,6 +27,7 @@
         <module>audio</module>
         <module>mcp-server</module>
         <module>mcp-agent</module>
+        <module>agentic-tools</module>
     </modules>
 
     <properties>

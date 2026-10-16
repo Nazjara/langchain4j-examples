@@ -54,6 +54,18 @@ A Model Context Protocol server built with `langchain4j-community-mcp-server`. I
 ### mcp-agent
 The MCP client side, built with `langchain4j-mcp`. `McpClientConfig` starts the `mcp-server` jar as a subprocess (`StdioMcpTransport`), connects a `DefaultMcpClient`, and wraps it in an `McpToolProvider` that the starter wires into the `McpAssistant` AI Service. `POST /ask` lets Claude call the remote `currentWeather` tool; `GET /tools` lists what the server publishes. The tool list is fetched on the first AI Service call, not at startup, and cached afterwards. The remaining endpoints show the client's resource and prompt API (`GET /resources`, `POST /resources/ask`, `GET /prompts`, `POST /prompts/{name}`). They return HTTP 501 here, because LangChain4j's own server cannot serve resources or prompts; `McpServerGatewayTest` and `QuestionControllerTest` run them against a stubbed client instead. `StdioMcpClientTest` starts the real server jar and asserts what works and what is rejected. Build `mcp-server` first (`./mvnw -pl mcp-server package -DskipTests`); the jar path is `ai.mcp.server.jar`, found from either the repository root or the `mcp-agent` directory, so it works from IntelliJ and from `../mvnw spring-boot:run` alike. Needs `ANTHROPIC_API_KEY` and `API_NINJAS_API_KEY`.
 
+### agentic-tools
+A travel assistant with 15 fake, deterministic tools (`TravelTools`), built with `AiServices.builder(...)` in `AiServicesConfig`, because `@AiService` can't set tool search, guardrails or the round-trip limit. `POST /ask?toolSearch=NONE|SIMPLE|VECTOR` (case-sensitive) runs the same question through one of three assistants:
+- `NONE` sends all 15 tool definitions with every request.
+- `SIMPLE` uses `SimpleToolSearchStrategy`: the model first sees only `tool_search_tool` and the always-visible `getLocalTime`, searches with keywords, and the found tools join the following requests.
+- `VECTOR` uses `VectorToolSearchStrategy`, which matches a natural-language query against the tool descriptions with local MiniLM embeddings.
+
+A search costs one extra model call, so the response reports the number of model calls, every tool call, and the token usage summed over the loop (including Anthropic cache reads, since `cache-tools=true`). The `X-User-Id` header reaches `bookFlight`/`bookHotel` through `InvocationParameters`. It is not in the tool schema, so the model can't change who is booked. Each request is capped at 10 model calls; past that the request fails, and there is no per-tool limit.
+
+`POST /plan` returns a `TripPlan` checked by `TripPlanGuardrail`, which parses the JSON (`JsonExtractorOutputGuardrail`) and checks its content. An invalid plan is reprompted up to twice, then returns HTTP 422. The planner keeps a throwaway chat memory per request, because a reprompt is built from memory.
+
+`ToolSearchTest` and `TripPlannerTest` show what each mode sends and how a reprompt is assembled, against a stub model with no API key needed. Needs `ANTHROPIC_API_KEY`.
+
 ## Usage
 
 Each module can be run independently:
@@ -133,4 +145,13 @@ curl http://localhost:8080/resources
 curl -X POST http://localhost:8080/resources/ask -H 'Content-Type: application/json' -d '{"uri": "movies://Avatar", "question": "Who directed this movie?"}'
 curl http://localhost:8080/prompts
 curl -X POST http://localhost:8080/prompts/weather-report -H 'Content-Type: application/json' -d '{"city": "Lviv", "country": "Ukraine"}'
+```
+
+### agentic-tools (port 8080)
+
+```bash
+curl -X POST 'http://localhost:8080/ask?toolSearch=NONE' -H 'Content-Type: application/json' -H 'X-User-Id: alice' -d '{"question": "Find me a flight from Kyiv to Lisbon on 2026-10-20 and convert the cheapest price to UAH."}'
+curl -X POST 'http://localhost:8080/ask?toolSearch=SIMPLE' -H 'Content-Type: application/json' -H 'X-User-Id: alice' -d '{"question": "Find me a flight from Kyiv to Lisbon on 2026-10-20 and convert the cheapest price to UAH."}'
+curl -X POST 'http://localhost:8080/ask?toolSearch=VECTOR' -H 'Content-Type: application/json' -H 'X-User-Id: alice' -d '{"question": "Find me a flight from Kyiv to Lisbon on 2026-10-20 and convert the cheapest price to UAH."}'
+curl -X POST http://localhost:8080/plan -H 'Content-Type: application/json' -d '{"question": "3 days in Lisbon from 2026-10-20, flying from Kyiv, mid-range budget."}'
 ```
