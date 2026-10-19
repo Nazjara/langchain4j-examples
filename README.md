@@ -9,7 +9,7 @@ Examples of using [LangChain4j](https://docs.langchain4j.dev) with Spring Boot, 
 - Anthropic API key (Claude) — all chat features
 - OpenAI API key — only for image generation (`image`) and text-to-speech (`audio`)
 - API Ninjas key — only for `functions`, `mcp-server` and `mcp-agent`
-- Docker — only for the `rag` `prod` profile (Milvus), `chat-memory` (PostgreSQL) and `observability-eval` (Grafana LGTM)
+- Docker — only for the `rag` `prod` profile (Milvus), `chat-memory` (PostgreSQL) and `observability` (Grafana LGTM)
 
 ## Setup
 
@@ -65,6 +65,26 @@ A search costs one extra model call, so the response reports the number of model
 `POST /plan` returns a `TripPlan` checked by `TripPlanGuardrail`, which parses the JSON (`JsonExtractorOutputGuardrail`) and checks its content. An invalid plan is reprompted up to twice, then returns HTTP 422. The planner keeps a throwaway chat memory per request, because a reprompt is built from memory.
 
 `ToolSearchTest` and `TripPlannerTest` show what each mode sends and how a reprompt is assembled, against a stub model with no API key needed. Needs `ANTHROPIC_API_KEY`.
+
+### observability
+A café assistant (`CafeAssistant`) that answers from `knowledge/cafe.md` (in-memory store, local MiniLM, top 3 chunks) and calls one tool (`getTodaysSpecial`). `POST /ask` returns the answer, the retrieved chunks with their scores, and the request's `traceId`. Every request becomes one trace in Grafana (Tempo), and the metrics go to Prometheus. Spring Boot starts the `grafana/otel-lgtm` container through Docker Compose and sends both over OTLP.
+
+LangChain4j ships one ready-made Micrometer listener, `ObservationChatModelListener`: a `chat <model>` span per model call plus the `gen_ai.client.token.usage` metric. The rest of the trace comes from this module's own listeners on LangChain4j's hooks:
+- `AiServiceObservations`: an `ai_service CafeAssistant.ask` parent span (AI Service events) and an `execute_tool <name>` span per tool call (before/after tool hooks)
+- `RetrievalObservationListener`: a `retrieve` span (`ContentRetrieverListener`), with the file, chunk index and score of each result
+
+```
+http post /ask
+└─ ai_service CafeAssistant.ask
+   ├─ retrieve
+   ├─ chat claude-sonnet-5-5
+   ├─ execute_tool getTodaysSpecial
+   └─ chat claude-sonnet-5-5
+```
+
+Each span also produces a duration metric (`langchain4j.ai_service`, `langchain4j.retrieval`, `langchain4j.tool`, `gen_ai.client.operation.duration`), visible at `/actuator/metrics`. `ai.observability.include-content=true` puts the question, answer, retrieval query and tool arguments/results on the spans. That's useful for learning, but it's user data, so keep it off in production. No LLM-as-judge evaluation: LangChain4j has no evaluator API.
+
+`ObservationTreeTest` checks the span tree, tags and failure paths against a stub model, with no API key needed. Needs `ANTHROPIC_API_KEY` and Docker. Grafana runs on port 3000, so stop any other LGTM container first.
 
 ## Usage
 
@@ -155,3 +175,13 @@ curl -X POST 'http://localhost:8080/ask?toolSearch=SIMPLE' -H 'Content-Type: app
 curl -X POST 'http://localhost:8080/ask?toolSearch=VECTOR' -H 'Content-Type: application/json' -H 'X-User-Id: alice' -d '{"question": "Find me a flight from Kyiv to Lisbon on 2026-10-20 and convert the cheapest price to UAH."}'
 curl -X POST http://localhost:8080/plan -H 'Content-Type: application/json' -d '{"question": "3 days in Lisbon from 2026-10-20, flying from Kyiv, mid-range budget."}'
 ```
+
+### observability (port 8080, Grafana on 3000)
+
+```bash
+curl -X POST http://localhost:8080/ask -H 'Content-Type: application/json' -d '{"question": "What is today'"'"'s special?"}'
+curl -X POST http://localhost:8080/ask -H 'Content-Type: application/json' -d '{"question": "Until what time is breakfast served, and how much is a flat white?"}'
+curl 'http://localhost:8080/actuator/metrics/gen_ai.client.token.usage?tag=gen_ai.token.type:input'
+```
+
+Open http://localhost:3000 → Explore → Tempo and search for the `traceId` from the response.

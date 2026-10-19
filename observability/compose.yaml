@@ -1,0 +1,11 @@
+# Explicit project name: the default (the directory name) could collide with another repo's module of the same name
+name: langchain4j-observability
+
+services:
+  lgtm:
+    container_name: langchain4j-observability-lgtm
+    image: grafana/otel-lgtm:0.34.0
+    ports:
+      - "3000:3000"
+      - "4317"
+      - "4318"

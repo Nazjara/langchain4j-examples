@@ -1,0 +1,34 @@
+@host = http://localhost:8080
+
+### Tool question: trace has retrieve, chat, execute_tool getTodaysSpecial, chat. Paste traceId into Grafana (localhost:3000) → Explore → Tempo
+POST {{host}}/ask
+Content-Type: application/json
+
+{
+  "question": "What's today's special?"
+}
+
+### Knowledge-base question: trace has retrieve and a single chat span
+POST {{host}}/ask
+Content-Type: application/json
+
+{
+  "question": "Until what time is breakfast served, and how much is a flat white?"
+}
+
+### Not in the knowledge base: the model should say it doesn't know
+POST {{host}}/ask
+Content-Type: application/json
+
+{
+  "question": "Do you have parking?"
+}
+
+### Token usage per model call (exists after the first successful /ask)
+GET {{host}}/actuator/metrics/gen_ai.client.token.usage?tag=gen_ai.token.type:input
+
+### Tool duration timer, tagged by tool name and outcome
+GET {{host}}/actuator/metrics/langchain4j.tool
+
+### AI Service duration timer
+GET {{host}}/actuator/metrics/langchain4j.ai_service
