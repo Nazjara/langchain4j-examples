@@ -4,8 +4,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 /**
- * Entry point of the rag module: answers questions from ingested documents, once with hand-written
- * retrieval and once with the AI Service's built-in retrieval augmentor.
+ * Entry point of the rag module: answers questions from ingested documents split into sources
+ * (trucks, boats), once searching every source and once searching the sources Claude picks.
  */
 @SpringBootApplication
 public class LangChain4jExamplesRagApplication {

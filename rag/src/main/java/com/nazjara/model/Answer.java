@@ -1,4 +1,6 @@
 package com.nazjara.model;
 
-public record Answer(String answer) {
+import java.util.List;
+
+public record Answer(String answer, List<Source> sources) {
 }

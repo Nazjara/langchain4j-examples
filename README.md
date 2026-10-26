@@ -37,7 +37,11 @@ Prompt-design techniques as live JUnit tests, ported from spring-ai-examples: sy
 Tool calling: a weather `@Tool` method (`WeatherTools`, backed by the API Ninjas `WeatherClient`) that the starter wires automatically into the `WeatherAssistant` AI Service. The model fetches live weather and converts sunrise and sunset to local time. `POST /weather/tool-calls` is LangChain4j-only: it also returns each tool call via `Result.toolExecutions()`. `ProgrammaticToolsTest` shows the `ToolSpecification` + `ToolExecutor` form, the round-trip cap and a custom error handler against a stub model, with no API key needed. Needs `ANTHROPIC_API_KEY` and `API_NINJAS_API_KEY`.
 
 ### rag
-Retrieval-augmented generation over the same documents as spring-ai-examples (a tow-vehicle list and four Yamaha boat performance bulletins). On every start, the documents are parsed with Apache Tika, split into segments of about 256 tokens, embedded in-process with all-MiniLM-L6-v2, and kept in an `InMemoryEmbeddingStore` on the heap, which is lost on shutdown. `POST /ask` does RAG by hand (`ManualRagService`: search → template → `ChatModel`). `POST /ask/augmented` is LangChain4j-only: the `RagAssistant` AI Service gets the starter's auto-configured `ContentRetriever`, so retrieval happens inside the proxy. Under the `prod` profile, segments go to Milvus (`docker compose up -d` in `rag/` first). Needs `ANTHROPIC_API_KEY`.
+Retrieval-augmented generation over the same documents as spring-ai-examples (a tow-vehicle list and four Yamaha boat performance bulletins). On every start, the documents are parsed with Apache Tika, split into segments of about 256 tokens, embedded in-process with all-MiniLM-L6-v2, and kept in an `InMemoryEmbeddingStore` on the heap, which is lost on shutdown. The documents are split into two sources, `trucks` and `boats` (`ai.rag.sources.*`): every chunk is tagged with its source, and each source is searched separately for its own top 3, so the boat bulletins can't crowd the truck list out of the results. Both endpoints return the answer plus the chunks used, with their source.
+- `POST /ask/augmented` (`RagAssistant`): every question searches every source (`DefaultQueryRouter`).
+- `POST /ask/routed` (`RoutingRagAssistant`): Claude first picks the sources (`LanguageModelQueryRouter`, one extra short Claude call). "How much can the Chevy Colorado tow?" searches trucks only; if Claude's pick can't be used, every source is searched.
+
+Retrieval runs inside the AI Service proxy, through a `DefaultRetrievalAugmentor` built in `RetrievalAugmentorConfig`. Under the `prod` profile, segments go to Milvus (`docker compose up -d` in `rag/` first). Needs `ANTHROPIC_API_KEY`.
 
 ### chat-memory
 One conversation per id: `ChatAssistant` takes a `@MemoryId`, and the starter wires in a `ChatMemoryProvider` that builds a 20-message `MessageWindowChatMemory` for each id. Messages persist in PostgreSQL through LangChain4j's `SQLChatMemoryStore` (`langchain4j-community-sql`), one JSON row per conversation. Boot's Docker Compose support starts the database automatically. `POST /chat/{id}` answers in one response. `POST /chat/{id}/stream` returns the same answer as Server-Sent Events through the AI Service's `Flux<String>` method; the reply is stored when the model's stream completes. Closing the connection doesn't stop the Anthropic call in LangChain4j 1.20.2. `GET /chat/{id}` shows the stored window and `DELETE /chat/{id}` clears it. `MemoryWindowTest` shows the window and per-id isolation against a stub model, with no API key or database needed. Needs `ANTHROPIC_API_KEY` and Docker. Boot looks for `compose.yaml` in the working directory, so an IntelliJ run configuration needs its working directory set to `$MODULE_WORKING_DIR$`.
@@ -139,8 +143,9 @@ curl -X POST http://localhost:8080/weather/tool-calls -H 'Content-Type: applicat
 ### rag (port 8080)
 
 ```bash
-curl -X POST http://localhost:8080/ask -H 'Content-Type: application/json' -d '{"question": "What is a good truck to pull a Sportsman 232 boat?"}'
 curl -X POST http://localhost:8080/ask/augmented -H 'Content-Type: application/json' -d '{"question": "What is a good truck to pull a Sportsman 232 boat?"}'
+curl -X POST http://localhost:8080/ask/routed -H 'Content-Type: application/json' -d '{"question": "What is a good truck to pull a Sportsman 232 boat?"}'
+curl -X POST http://localhost:8080/ask/routed -H 'Content-Type: application/json' -d '{"question": "How much can the Chevy Colorado tow?"}'
 ```
 
 With Milvus (`prod` profile):

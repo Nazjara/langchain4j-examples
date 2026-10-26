@@ -1,17 +1,33 @@
 @host = http://localhost:8080
 
-### Manual RAG: retrieve -> template -> ChatModel
-POST {{host}}/ask
+### Every source searched (trucks and boats): the truck list now reaches Claude
+POST {{host}}/ask/augmented
 Content-Type: application/json
 
 {
   "question": "What is a good truck to pull a Sportsman 232 boat?"
 }
 
-### Same question through the AI Service's retrieval augmentor (LangChain4j-only)
-POST {{host}}/ask/augmented
+### Claude picks the sources: this one needs both
+POST {{host}}/ask/routed
 Content-Type: application/json
 
 {
   "question": "What is a good truck to pull a Sportsman 232 boat?"
+}
+
+### Claude picks the sources: trucks only (every chunk in "sources" is "trucks")
+POST {{host}}/ask/routed
+Content-Type: application/json
+
+{
+  "question": "How much can the Chevy Colorado tow?"
+}
+
+### Claude picks the sources: boats only
+POST {{host}}/ask/routed
+Content-Type: application/json
+
+{
+  "question": "What is the top speed of the Sportsman Open 232?"
 }

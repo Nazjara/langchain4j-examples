@@ -1,39 +1,35 @@
 package com.nazjara.service;
 
+import static dev.langchain4j.service.spring.AiServiceWiringMode.EXPLICIT;
+
+import dev.langchain4j.service.Result;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.spring.AiService;
 
 /**
- * RAG as an AI Service slot: the interface has no retrieval code at all.
+ * RAG as an AI Service slot: the interface has no retrieval code at all. Every question searches
+ * every source (trucks and boats).
  *
- * <p>The starter's {@code RagAutoConfiguration} sees the {@code EmbeddingModel} and
- * {@code EmbeddingStore} beans and registers an {@code EmbeddingStoreContentRetriever}
- * ({@code langchain4j.rag.retrieval.max-results=4}). {@code @AiService} auto-wiring then puts that
- * {@code ContentRetriever} into the proxy, which wraps it in a {@code DefaultRetrievalAugmentor}
- * and runs its stages before each model call:
- * <ol>
- *   <li>{@code QueryTransformer}: the user message becomes a {@code Query} (default: unchanged).</li>
- *   <li>{@code QueryRouter}: picks the retrievers for the query (default: all of them).</li>
- *   <li>{@code ContentRetriever}: embeds the query and searches the store.</li>
- *   <li>{@code ContentAggregator}: merges and ranks results (default: reciprocal-rank fusion).</li>
- *   <li>{@code ContentInjector}: appends the segments to the <em>user</em> message under
- *       "Answer using the following information:".</li>
- * </ol>
- * The system message is the same as {@link ManualRagService}'s, but the RAG template is
- * LangChain4j's built-in one, not {@code rag-prompt-template.txt}.
+ * <p>Before each model call, the proxy hands the user message to the {@code searchAllAugmentor}
+ * bean ({@code RetrievalAugmentorConfig}), which searches each source for its own top chunks and
+ * appends them to the user message. {@link Result#sources()} returns the chunks that were injected.
+ *
+ * <p>The module has two {@code RetrievalAugmentor} beans, so automatic wiring would fail on the
+ * duplicate; {@code EXPLICIT} wiring names the beans to use. {@code anthropicChatModel} is the bean
+ * the Anthropic starter registers.
  *
  * <p>Spring AI's equivalent is {@code QuestionAnswerAdvisor} (or the modular
  * {@code RetrievalAugmentationAdvisor}) added to the {@code ChatClient}.
  */
-@AiService
+@AiService(wiringMode = EXPLICIT, chatModel = "anthropicChatModel", retrievalAugmentor = "searchAllAugmentor")
 public interface RagAssistant {
 
     /**
-     * Answers a question, with retrieval done by the proxy before the model call.
+     * Answers a question, with retrieval from every source done by the proxy before the model call.
      *
      * @param question the user's question
-     * @return the model's answer
+     * @return the model's answer plus the injected chunks ({@code sources()})
      */
     @SystemMessage(fromResource = "/prompts/system-message.txt")
-    String ask(String question);
+    Result<String> ask(String question);
 }

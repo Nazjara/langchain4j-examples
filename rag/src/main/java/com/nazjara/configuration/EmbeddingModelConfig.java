@@ -14,9 +14,9 @@ import org.springframework.context.annotation.Configuration;
  * AI's {@code spring-ai-starter-model-transformers} runs the same model but downloads it on first
  * use. The two produce the same vectors, so retrieval results are comparable across the repos.
  *
- * <p>The starter does not create an {@link EmbeddingModel}; once this bean exists, its
- * {@code RagAutoConfiguration} combines it with the {@code EmbeddingStore} bean into an
- * {@code EmbeddingStoreContentRetriever} (see {@code RagAssistant}).
+ * <p>The starter does not create an {@link EmbeddingModel}. {@code RetrievalAugmentorConfig} combines
+ * this bean with the {@code EmbeddingStore} bean into one {@code EmbeddingStoreContentRetriever} per
+ * source.
  */
 @Configuration
 public class EmbeddingModelConfig {

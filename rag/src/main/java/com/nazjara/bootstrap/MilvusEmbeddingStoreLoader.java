@@ -17,6 +17,9 @@ import org.springframework.stereotype.Component;
  * collection is already filled. Spring AI's {@code vectorStore.similaritySearch("Sportsman")}
  * embeds the text internally; here the probe is embedded explicitly, because an
  * {@code EmbeddingStore} only accepts vectors.
+ *
+ * <p>A filled collection is never re-ingested, so chunks stored before the {@code category} tag
+ * existed stay untagged and no source finds them: drop the collection to reload it.
  */
 @Profile("prod")
 @Component
