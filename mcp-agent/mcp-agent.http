@@ -1,6 +1,6 @@
 @host = http://localhost:8080
 
-### Weather question answered via the MCP server's currentWeather tool
+### Current weather via the stdio server's currentWeather tool (needs API_NINJAS_API_KEY)
 POST {{host}}/ask
 Content-Type: application/json
 
@@ -8,29 +8,59 @@ Content-Type: application/json
   "question": "What is the weather in Lviv, Ukraine? When are sunrise and sunset?"
 }
 
-### Tools the MCP server publishes (tools/list)
+### Forecast and air quality via the HTTP server's tools (Open-Meteo, no key)
+POST {{host}}/ask
+Content-Type: application/json
+
+{
+  "question": "Will it rain in Lviv in the next three days, and how is the air there right now?"
+}
+
+### Ambiguous city: the HTTP server lists the Springfields and Claude asks which one
+POST {{host}}/ask
+Content-Type: application/json
+
+{
+  "question": "What is the air quality in Springfield?"
+}
+
+### Tools of both servers (tools/list), each with its server key
 GET {{host}}/tools
 
-### Resources the MCP server publishes (resources/list) - 501: LangChain4j's server has no resources
+### Resources of the HTTP server (resources/list + resources/templates/list)
 GET {{host}}/resources
 
-### Question answered from an MCP resource (resources/read) - 501: LangChain4j's server has no resources
+### Question answered from a fixed resource (resources/read)
 POST {{host}}/resources/ask
 Content-Type: application/json
 
 {
-  "uri": "movies://Avatar",
-  "question": "Who directed this movie?"
+  "uri": "weather://wmo-codes",
+  "question": "Which codes mean snow?"
 }
 
-### Prompts the MCP server publishes (prompts/list) - 501: LangChain4j's server has no prompts
+### Question answered from a resource template filled in (resources/read)
+POST {{host}}/resources/ask
+Content-Type: application/json
+
+{
+  "uri": "weather://city/San%20Jose",
+  "question": "Which San Jose has the most people, and in which time zone is it?"
+}
+
+### Prompts of the HTTP server (prompts/list)
 GET {{host}}/prompts
 
-### Run a server-side prompt (prompts/get) - 501: LangChain4j's server has no prompts
-POST {{host}}/prompts/weather-report
+### Run the HTTP server's prompt (prompts/get); the trip starts tomorrow and must end within 16 days
+< {%
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    request.variables.set("startDate", tomorrow.toISOString().slice(0, 10));
+%}
+POST {{host}}/prompts/trip-weather-brief
 Content-Type: application/json
 
 {
   "city": "Lviv",
-  "country": "Ukraine"
+  "startDate": "{{startDate}}",
+  "days": "3"
 }

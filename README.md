@@ -8,7 +8,7 @@ Examples of using [LangChain4j](https://docs.langchain4j.dev) with Spring Boot, 
 - Maven (wrapper included)
 - Anthropic API key (Claude) — all chat features
 - OpenAI API key — only for image generation (`image`) and text-to-speech (`audio`)
-- API Ninjas key — only for `functions`, `mcp-server` and `mcp-agent`
+- API Ninjas key — only for `functions` and the `currentWeather` tool of `mcp-server` (used by `mcp-agent`); `mcp-http-server` needs no key
 - Docker — only for the `rag` `prod` profile (Milvus), `chat-memory` (PostgreSQL) and `observability` (Grafana LGTM)
 
 ## Setup
@@ -49,10 +49,32 @@ Two kinds of model in one app. `POST /image` generates a picture with OpenAI's `
 Text-to-speech: `POST /audio` turns text into MP3 with OpenAI's `gpt-4o-mini-tts` through LangChain4j's `TextToSpeechModel`. The OpenAI starter has no text-to-speech properties, so `TextToSpeechModelConfig` builds the model by hand from `ai.openai.*`. Only the model, the text and the voice can be set; speed, speaking instructions and the audio format cannot. Needs `OPENAI_API_KEY` only.
 
 ### mcp-server
-A Model Context Protocol server built with `langchain4j-community-mcp-server`. It publishes the `currentWeather` tool, declared with the same `@Tool` annotation an AI Service uses; `@Tool(metadata)` adds the MCP title and the read-only/idempotent hints. LangChain4j's server speaks stdio only and serves tools only: it has no HTTP transport, no resources, no prompts and no notifications. The app therefore has no web server and is not run on its own. An MCP client on the same machine starts the jar as a subprocess and talks to it over stdin and stdout; it cannot be reached over the network or shared between clients. Because of that, so the banner is off and all logging goes to stderr. `McpServerTest` drives the protocol handler directly and shows each response, including "Method not found" for resources, prompts and `ping`; no API key needed. Needs `API_NINJAS_API_KEY` at runtime.
+A Model Context Protocol server built with `langchain4j-community-mcp-server`. It publishes the `currentWeather` tool, declared with the same `@Tool` annotation an AI Service uses; `@Tool(metadata)` adds the MCP title and the read-only/idempotent hints. LangChain4j's server speaks stdio only and serves tools only: it has no HTTP transport, no resources, no prompts and no notifications. The app therefore has no web server and is not run on its own. An MCP client on the same machine starts the jar as a subprocess and talks to it over stdin and stdout; it cannot be reached over the network or shared between clients. Stdout is the protocol channel, so the banner is off and all logging goes to stderr. `McpServerTest` drives the protocol handler directly and shows each response, including "Method not found" for resources, prompts and `ping`; no API key needed. The server starts without `API_NINJAS_API_KEY`; only `currentWeather` calls need it. `mcp-agent` keeps it as the "local plug-in" example next to `mcp-http-server`.
+
+### mcp-http-server
+A remotely reachable MCP server on `http://<host>:8090/mcp`, built with the official MCP Java SDK (`mcp-core` + `mcp-json-jackson3` 2.1.0) as a plain servlet in Spring Boot. It uses no LangChain4j and no Spring AI, because LangChain4j has no HTTP MCP server. It is the counterpart for LangChain4j's client in `mcp-agent`. It serves all three MCP primitives from Open-Meteo, with no API key:
+- tools `forecast(city, country?, region?, days)` (1–16 days: WMO code, high/low, rain, wind) and `airQuality(city, country?, region?)` (European AQI, PM2.5, PM10)
+- resources `weather://wmo-codes` (the WMO weather code table) and the template `weather://city/{name}` (all places with that exact name)
+- prompt `trip-weather-brief(city, startDate, days, country?)`, which renders the trip's forecast into the message and embeds the code table, so the model needs no tool
+
+Both tools look the city up first. A place at least 10× more populous than the next one with the same name wins (Lviv the city, not two villages). Otherwise the tool returns the candidates as an error result, Claude asks the user, and the next request names the place.
+
+The server is **stateless** (`HttpServletStatelessServerTransport`): every `POST /mcp` stands alone, no `Mcp-Session-Id` is issued, and `GET /mcp` returns 405. That lets it scale out and survive restarts, but it can't send anything to a client on its own: no logs or progress during a call, no resource-updated or list-changed notifications, no elicitation or sampling. The capabilities say so (`listChanged`/`subscribe` false). Those features are built in `spring-ai-examples`' MCP modules instead. It listens on all interfaces with no authentication, which is fine for public weather data. An `Origin` check blocks browsers (DNS rebinding); `ai.mcp.allowed-origins` can allow some. Tool arguments are validated against the input schema by the SDK before a handler runs.
+
+`LangChain4jClientOverHttpTest` boots the server on a random port with Open-Meteo mocked and drives it with LangChain4j's own `DefaultMcpClient` + `StreamableHttpMcpTransport`: no session, every tool, resource and prompt, the error codes, a client that asks for the GET stream, and the `Origin` rejection. No API key needed.
 
 ### mcp-agent
-The MCP client side, built with `langchain4j-mcp`. `McpClientConfig` starts the `mcp-server` jar as a subprocess (`StdioMcpTransport`), connects a `DefaultMcpClient`, and wraps it in an `McpToolProvider` that the starter wires into the `McpAssistant` AI Service. `POST /ask` lets Claude call the remote `currentWeather` tool; `GET /tools` lists what the server publishes. The tool list is fetched on the first AI Service call, not at startup, and cached afterwards. The remaining endpoints show the client's resource and prompt API (`GET /resources`, `POST /resources/ask`, `GET /prompts`, `POST /prompts/{name}`). They return HTTP 501 here, because LangChain4j's own server cannot serve resources or prompts; `McpServerGatewayTest` and `QuestionControllerTest` run them against a stubbed client instead. `StdioMcpClientTest` starts the real server jar and asserts what works and what is rejected. Build `mcp-server` first (`./mvnw -pl mcp-server package -DskipTests`); the jar path is `ai.mcp.server.jar`, found from either the repository root or the `mcp-agent` directory, so it works from IntelliJ and from `../mvnw spring-boot:run` alike. Needs `ANTHROPIC_API_KEY` and `API_NINJAS_API_KEY`.
+The MCP client side, built with `langchain4j-mcp`, connected to two servers. `McpClientConfig` builds one `DefaultMcpClient` per server:
+- `api-ninjas`: starts the `mcp-server` jar as a subprocess (`StdioMcpTransport`); a local plug-in that serves only this client
+- `open-meteo`: connects to `mcp-http-server` over Streamable HTTP (`StreamableHttpMcpTransport`, `ai.mcp.http-server.url`); a remote service any client can use
+
+One `McpToolProvider` over both clients is wired by the starter into the `McpAssistant` AI Service. Claude sees one flat list (`currentWeather`, `forecast`, `airQuality`), and each call is routed to the server that owns the tool. The tool lists are fetched on the first AI Service call and cached. A server that fails to list is skipped with a warning; one that is down at startup stops the app, so start `mcp-http-server` first. Without `API_NINJAS_API_KEY` only `currentWeather` fails, and Claude can still use the HTTP server's tools.
+
+The provider also presents resources as tools (`list_resources`, `get_resource`), so Claude can read the WMO code table or a city's places itself. LangChain4j's default presenter fails the whole listing when one server rejects `resources/list`, which the stdio server always does. `SkippingResourcesAsToolsPresenter` skips servers that answer "Method not found" and keeps the default otherwise.
+
+`GET /tools` lists both servers' tools with the server key. `GET /resources`, `POST /resources/ask`, `GET /prompts` and `POST /prompts/{name}` call the HTTP server directly: resources are application-controlled and prompts user-controlled, so they reach the model through the app, not the tool loop. MCP errors map to HTTP: method not found → 501, invalid params → 400, resource not found → 404, anything else → 502. Both servers push nothing, so one shared client per server is enough; a stateful server with logs or progress would need one client per user.
+
+Tests need no key: `McpToolProviderTest` (merging two servers, routing, a name clash failing, `toolNameMapper`, `filterToolNames`), `SkippingResourcesAsToolsPresenterTest`, `McpServerGatewayTest`, `QuestionControllerTest`, and `StdioMcpClientTest`, which starts the real stdio jar. Build `mcp-server` first (`./mvnw -pl mcp-server package -DskipTests`); the jar path is `ai.mcp.server.jar`, found from either the repository root or the `mcp-agent` directory. Needs `ANTHROPIC_API_KEY`, a running `mcp-http-server`, and `API_NINJAS_API_KEY` for `currentWeather`.
 
 ### agentic-tools
 A travel assistant with 15 fake, deterministic tools (`TravelTools`), built with `AiServices.builder(...)` in `AiServicesConfig`, because `@AiService` can't set tool search, guardrails or the round-trip limit. `POST /ask?toolSearch=NONE|SIMPLE|VECTOR` (case-sensitive) runs the same question through one of three assistants:
@@ -149,22 +171,35 @@ curl -X POST http://localhost:8080/vision -F 'file=@image/src/test/resources/sam
 curl -X POST http://localhost:8080/audio -H 'Content-Type: application/json' -d '{"question": "Welcome aboard. Today we are towing a boat to the coast."}' -o speech.mp3
 ```
 
-### mcp-agent (port 8080)
+### mcp-http-server (port 8090) + mcp-agent (port 8080)
 
-Starts `mcp-server` itself; build that module first.
+Build `mcp-server`, start `mcp-http-server`, then start `mcp-agent` (it starts `mcp-server` itself):
+
+```bash
+./mvnw -pl mcp-server,mcp-http-server package -DskipTests
+java -jar mcp-http-server/target/mcp-http-server-1.0.0-SNAPSHOT.jar
+```
+
+```bash
+cd mcp-agent && ../mvnw spring-boot:run
+```
 
 ```bash
 curl -X POST http://localhost:8080/ask -H 'Content-Type: application/json' -d '{"question": "What is the weather in Lviv, Ukraine? When are sunrise and sunset?"}'
+curl -X POST http://localhost:8080/ask -H 'Content-Type: application/json' -d '{"question": "Will it rain in Lviv in the next three days, and how is the air there right now?"}'
+curl -X POST http://localhost:8080/ask -H 'Content-Type: application/json' -d '{"question": "What is the air quality in Springfield?"}'
 curl http://localhost:8080/tools
+curl http://localhost:8080/resources
+curl -X POST http://localhost:8080/resources/ask -H 'Content-Type: application/json' -d '{"uri": "weather://wmo-codes", "question": "Which codes mean snow?"}'
+curl -X POST http://localhost:8080/resources/ask -H 'Content-Type: application/json' -d '{"uri": "weather://city/San%20Jose", "question": "Which San Jose has the most people, and in which time zone is it?"}'
+curl http://localhost:8080/prompts
+curl -X POST http://localhost:8080/prompts/trip-weather-brief -H 'Content-Type: application/json' -d "{\"city\": \"Lviv\", \"startDate\": \"$(date -d tomorrow +%F)\", \"days\": \"3\"}"
 ```
 
-These return 501, because LangChain4j's MCP server has no resources or prompts:
+The server can be called without the agent. The `Accept` header must list both types:
 
 ```bash
-curl http://localhost:8080/resources
-curl -X POST http://localhost:8080/resources/ask -H 'Content-Type: application/json' -d '{"uri": "movies://Avatar", "question": "Who directed this movie?"}'
-curl http://localhost:8080/prompts
-curl -X POST http://localhost:8080/prompts/weather-report -H 'Content-Type: application/json' -d '{"city": "Lviv", "country": "Ukraine"}'
+curl -X POST http://localhost:8090/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "forecast", "arguments": {"city": "Lviv", "days": 2}}}'
 ```
 
 ### agentic-tools (port 8080)

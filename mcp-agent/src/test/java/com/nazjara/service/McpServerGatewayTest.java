@@ -5,6 +5,8 @@ import static org.mockito.Mockito.when;
 
 import com.nazjara.model.PromptInfo;
 import com.nazjara.model.ResourceInfo;
+import com.nazjara.model.ToolInfo;
+import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.mcp.client.McpBlobResourceContents;
@@ -28,11 +30,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * The resource and prompt calls against a stubbed {@link McpClient}.
- *
- * <p>LangChain4j's own MCP server cannot answer any of these requests, so this is the only place in
- * the repository where the client's resource and prompt API returns data. The stubs return what a
- * server with resources and prompts would send.
+ * The gateway's calls against stubbed {@link McpClient}s: tools from every server with the server
+ * key, resources and prompts from the content server. The stubs return what such a server sends;
+ * {@code mcp-http-server}'s {@code LangChain4jClientOverHttpTest} covers the real exchange.
  */
 @ExtendWith(MockitoExtension.class)
 class McpServerGatewayTest {
@@ -40,11 +40,28 @@ class McpServerGatewayTest {
     @Mock
     private McpClient mcpClient;
 
+    @Mock
+    private McpClient stdioMcpClient;
+
     private McpServerGateway gateway;
 
     @BeforeEach
     void setUp() {
-        gateway = new McpServerGateway(mcpClient);
+        gateway = new McpServerGateway(List.of(stdioMcpClient, mcpClient), mcpClient);
+    }
+
+    @Test
+    void toolsListsEveryServerWithItsKey() {
+        when(stdioMcpClient.key()).thenReturn("api-ninjas");
+        when(stdioMcpClient.listTools()).thenReturn(List.of(ToolSpecification.builder().name("currentWeather").description("Now").build()));
+        when(mcpClient.key()).thenReturn("open-meteo");
+        when(mcpClient.listTools()).thenReturn(List.of(ToolSpecification.builder().name("forecast").description("Days").build()));
+
+        var tools = gateway.tools();
+
+        assertThat(tools).containsExactly(
+                new ToolInfo("api-ninjas", "currentWeather", "Now", Map.of()),
+                new ToolInfo("open-meteo", "forecast", "Days", Map.of()));
     }
 
     @Test

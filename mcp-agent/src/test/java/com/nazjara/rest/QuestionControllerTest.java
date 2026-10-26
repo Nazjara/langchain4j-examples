@@ -46,7 +46,7 @@ class QuestionControllerTest {
     void setUp() {
         chatModel = new ScriptedChatModel(AiMessage.from("James Cameron."));
         var mcpAssistant = AiServices.builder(McpAssistant.class).chatModel(chatModel).build();
-        controller = new QuestionController(mcpAssistant, new McpServerGateway(mcpClient), chatModel);
+        controller = new QuestionController(mcpAssistant, new McpServerGateway(List.of(mcpClient), mcpClient), chatModel);
     }
 
     @Test
@@ -87,8 +87,22 @@ class QuestionControllerTest {
     }
 
     @Test
+    void invalidParamsFromTheServerBecomesBadRequest() {
+        var problem = controller.handleMcpError(new McpException(-32602, "days must be a whole number from 1 to 16, got 40"));
+
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST.value());
+    }
+
+    @Test
+    void resourceNotFoundFromTheServerBecomesNotFound() {
+        var problem = controller.handleMcpError(new McpException(-32002, "Resource not found"));
+
+        assertThat(problem.getStatus()).isEqualTo(HttpStatus.NOT_FOUND.value());
+    }
+
+    @Test
     void anyOtherServerErrorBecomesBadGateway() {
-        var problem = controller.handleMcpError(new McpException(-32602, "Missing tool name"));
+        var problem = controller.handleMcpError(new McpException(-32603, "Internal error"));
 
         assertThat(problem.getStatus()).isEqualTo(HttpStatus.BAD_GATEWAY.value());
     }
