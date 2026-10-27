@@ -1,12 +1,17 @@
 package com.nazjara.configuration;
 
 import com.nazjara.guardrail.TripPlanGuardrail;
+import com.nazjara.service.StreamingTravelAssistant;
 import com.nazjara.service.TravelAssistant;
 import com.nazjara.service.TripPlanner;
+import com.nazjara.tool.RoleToolProvider;
 import com.nazjara.tool.TravelTools;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.guardrail.config.OutputGuardrailsConfig;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.embedding.onnx.allminilml6v2.AllMiniLmL6V2EmbeddingModel;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.tool.search.simple.SimpleToolSearchStrategy;
@@ -56,6 +61,14 @@ import org.springframework.context.annotation.Configuration;
  * {@link MessageWindowChatMemory} of {@code ai.agentic-tools.plan.memory-messages} per memory id. A reprompt is built from chat memory, so without
  * memory the retry would carry only the reprompt text. The window is large enough that tool
  * calls and results cannot push the request out of it.
+ *
+ * <p><b>Role-aware assistants.</b> {@code restrictedAssistant} (blocking) and {@code streamingAssistant}
+ * ({@link StreamingTravelAssistant}, {@code TokenStream}) get their tools from a {@link RoleToolProvider}
+ * instead of {@code .tools(travelTools)}, and share a {@code hallucinatedToolNameStrategy}. The
+ * default strategy throws, which fails the whole request when the model names a tool that was not
+ * offered. {@link #unknownToolReply} returns an ordinary tool result instead, so the model reads
+ * "not available" on the next round trip and answers the user. It runs only when no executor is
+ * registered for the name, so it never fires for a tool the role may use.
  */
 @Configuration
 @EnableConfigurationProperties(AgenticToolsProperties.class)
@@ -98,10 +111,34 @@ public class AiServicesConfig {
                 .build();
     }
 
+    @Bean
+    TravelAssistant restrictedAssistant(ChatModel chatModel, RoleToolProvider roleToolProvider) {
+        return roleAware(AiServices.builder(TravelAssistant.class).chatModel(chatModel), roleToolProvider).build();
+    }
+
+    @Bean
+    StreamingTravelAssistant streamingAssistant(StreamingChatModel streamingChatModel, RoleToolProvider roleToolProvider) {
+        return roleAware(AiServices.builder(StreamingTravelAssistant.class).streamingChatModel(streamingChatModel),
+                roleToolProvider).build();
+    }
+
+    static ToolExecutionResultMessage unknownToolReply(ToolExecutionRequest request) {
+        return ToolExecutionResultMessage.from(request,
+                "Tool '%s' is not available. Use only the tools you were given; if none fits, tell the user you can't do that here."
+                        .formatted(request.name()));
+    }
+
     private AiServices<TravelAssistant> travelAssistant(ChatModel chatModel, TravelTools travelTools) {
         return AiServices.builder(TravelAssistant.class)
                 .chatModel(chatModel)
                 .tools(travelTools)
+                .maxToolCallingRoundTrips(properties.maxToolCallingRoundTrips());
+    }
+
+    private <T> AiServices<T> roleAware(AiServices<T> builder, RoleToolProvider roleToolProvider) {
+        return builder
+                .toolProvider(roleToolProvider)
+                .hallucinatedToolNameStrategy(AiServicesConfig::unknownToolReply)
                 .maxToolCallingRoundTrips(properties.maxToolCallingRoundTrips());
     }
 }

@@ -52,3 +52,33 @@ Content-Type: application/json
 {
   "question": "3 days in Lisbon from 2026-10-20, flying from Kyiv, mid-range budget."
 }
+
+### ToolProvider: a GUEST is never offered bookFlight/bookHotel; Claude says it can't book
+POST {{host}}/ask/restricted
+Content-Type: application/json
+X-User-Id: alice
+X-Role: GUEST
+
+{
+  "question": "Book the morning flight from Kyiv to Lisbon on 2026-10-20."
+}
+
+### ToolProvider: a MEMBER gets all 15 tools and the booking goes through for alice
+POST {{host}}/ask/restricted
+Content-Type: application/json
+X-User-Id: alice
+X-Role: MEMBER
+
+{
+  "question": "Book the morning flight from Kyiv to Lisbon on 2026-10-20."
+}
+
+### TokenStream over SSE: text, tool-start and tool-end events, then done. Close the connection to cancel the model call
+POST {{host}}/ask/stream
+Content-Type: application/json
+X-User-Id: alice
+X-Role: MEMBER
+
+{
+  "question": "Find me a flight from Kyiv to Lisbon on 2026-10-20 and convert the cheapest price to UAH."
+}
