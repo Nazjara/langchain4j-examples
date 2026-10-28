@@ -20,6 +20,10 @@
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-guardrails</artifactId>
         </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-skills</artifactId>
+        </dependency>
     </dependencies>
 
 </project>

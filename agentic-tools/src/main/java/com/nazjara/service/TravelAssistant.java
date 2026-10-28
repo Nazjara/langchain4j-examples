@@ -7,8 +7,9 @@ import dev.langchain4j.service.UserMessage;
 
 /**
  * Travel assistant over the 15 {@code TravelTools}. {@code AiServicesConfig} builds this interface
- * three times, once per tool search mode, because {@code @AiService} has no attribute for a
- * {@code ToolSearchStrategy} or for {@code maxToolCallingRoundTrips}.
+ * several times (one per tool search mode, the role-aware one and the skills one), because
+ * {@code @AiService} has no attribute for a {@code ToolSearchStrategy}, a system message
+ * transformer or {@code maxToolCallingRoundTrips}.
  *
  * <p>The {@link InvocationParameters} argument is not part of the prompt. The proxy finds it by
  * type, stores it in the invocation's {@code InvocationContext}, and injects it into every tool

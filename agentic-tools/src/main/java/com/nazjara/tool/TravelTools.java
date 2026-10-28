@@ -266,7 +266,7 @@ public class TravelTools {
                 .formatted(city, 1 + seed(city) % 3, seed(city) % 100);
     }
 
-    private static String currentUser(InvocationParameters parameters) {
+    static String currentUser(InvocationParameters parameters) {
         String userId = parameters.get(USER_ID);
         if (userId == null) {
             throw new IllegalStateException("Booking needs a signed-in user and is not available here");
@@ -274,7 +274,7 @@ public class TravelTools {
         return userId;
     }
 
-    private static int seed(String... values) {
+    static int seed(String... values) {
         return Math.abs(String.join("|", values).toLowerCase(Locale.ROOT).hashCode());
     }
 }

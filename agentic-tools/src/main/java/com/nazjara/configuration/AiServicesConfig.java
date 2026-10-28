@@ -6,6 +6,9 @@ import com.nazjara.service.TravelAssistant;
 import com.nazjara.service.TripPlanner;
 import com.nazjara.tool.RoleToolProvider;
 import com.nazjara.tool.TravelTools;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.guardrail.config.OutputGuardrailsConfig;
@@ -13,13 +16,16 @@ import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
 import dev.langchain4j.model.embedding.onnx.allminilml6v2.AllMiniLmL6V2EmbeddingModel;
+import dev.langchain4j.model.input.PromptTemplate;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.tool.search.simple.SimpleToolSearchStrategy;
 import dev.langchain4j.service.tool.search.vector.VectorToolSearchStrategy;
+import dev.langchain4j.skills.Skills;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
 
 /**
  * Builds the module's AI Services with {@link AiServices#builder(Class)}, because {@code @AiService}
@@ -51,6 +57,29 @@ import org.springframework.context.annotation.Configuration;
  * make the starter's {@code RagAutoConfiguration} add an embedding store and a content retriever
  * that this module does not use.
  *
+ * <p><b>Skills assistant.</b> {@code skillsAssistant} keeps all 15 {@link TravelTools} visible, as
+ * {@code allToolsAssistant} does, and adds the {@link Skills} from {@link SkillsConfig}:
+ * <ul>
+ *   <li>{@code toolProvider(travelSkills.toolProvider())} adds {@code activate_skill(skill_name)} and
+ *       {@code read_skill_resource(skill_name, relative_path)} to every request. The first returns
+ *       the skill's {@code SKILL.md} body as the tool result and tags the result message with
+ *       {@code activated_skill}; the second returns a preloaded resource file. An unknown name or
+ *       path goes back to the model as an error listing the valid ones.</li>
+ *   <li>The provider is dynamic (a skill has tools), so the proxy asks it again before every round
+ *       trip. It scans the message list for {@code activated_skill} tags and adds the tools of those
+ *       skills; tools are only ever added within an invocation. The insurance tools therefore
+ *       appear on the request after {@code activate_skill("travel-insurance")}. A scoped tool named
+ *       like a direct one would be skipped silently (the direct one wins).</li>
+ *   <li>{@code systemMessageTransformer} appends {@code prompts/skills-system.txt} with
+ *       {@link Skills#formatAvailableSkills()} (an {@code <available_skills>} XML list of names and
+ *       descriptions) to the {@code @SystemMessage} text. LangChain4j doesn't add the list itself,
+ *       and the descriptions are all the model has to decide whether a skill applies.</li>
+ * </ul>
+ * Activation lives only in the message list. Like the tool-search assistants, this one has no chat
+ * memory, so every request starts with no skill active and pays one extra model call per
+ * activation. It shares {@link #unknownToolReply}, so a call to {@code quoteInsurance} before
+ * activation is answered "not available" instead of failing the request.
+ *
  * <p><b>Limit.</b> {@code maxToolCallingRoundTrips} ({@code ai.agentic-tools.max-tool-calling-round-trips})
  * caps model calls per request; past it the proxy
  * throws, so the request fails instead of the model being told to stop. LangChain4j has no per-tool
@@ -75,6 +104,8 @@ import org.springframework.context.annotation.Configuration;
 @RequiredArgsConstructor
 public class AiServicesConfig {
 
+    private static final String SKILLS_PROMPT = "prompts/skills-system.txt";
+
     private final AgenticToolsProperties properties;
 
     @Bean
@@ -93,6 +124,18 @@ public class AiServicesConfig {
     TravelAssistant vectorSearchAssistant(ChatModel chatModel, TravelTools travelTools) {
         return travelAssistant(chatModel, travelTools)
                 .toolSearchStrategy(new VectorToolSearchStrategy(new AllMiniLmL6V2EmbeddingModel()))
+                .build();
+    }
+
+    @Bean
+    TravelAssistant skillsAssistant(ChatModel chatModel, TravelTools travelTools, Skills travelSkills) throws IOException {
+        var skillsPrompt = PromptTemplate.from(new ClassPathResource(SKILLS_PROMPT).getContentAsString(StandardCharsets.UTF_8))
+                .apply(Map.of("availableSkills", travelSkills.formatAvailableSkills()))
+                .text();
+        return travelAssistant(chatModel, travelTools)
+                .toolProvider(travelSkills.toolProvider())
+                .systemMessageTransformer(systemMessage -> systemMessage + "\n\n" + skillsPrompt)
+                .hallucinatedToolNameStrategy(AiServicesConfig::unknownToolReply)
                 .build();
     }
 

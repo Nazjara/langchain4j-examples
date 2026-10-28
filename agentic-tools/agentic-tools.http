@@ -73,6 +73,42 @@ X-Role: MEMBER
   "question": "Book the morning flight from Kyiv to Lisbon on 2026-10-20."
 }
 
+### Skills: activate_skill("travel-insurance") -> read_skill_resource(coverage.md) -> quoteInsurance, a tool that exists only after the activation
+POST {{host}}/ask/skills
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "question": "I'm 34 and going to Portugal for 10 days. Which travel insurance should I get?"
+}
+
+### Skills: buying goes through buyInsurance for alice (the X-User-Id), never for a name in the question
+POST {{host}}/ask/skills
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "question": "I'm 34 and going to Portugal for 10 days. Quote travel insurance and buy the STANDARD tier."
+}
+
+### Skills: packing-list adds instructions (fixed four-section checklist) but no tools; it uses the direct weather and transport tools
+POST {{host}}/ask/skills
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "question": "What should I pack for Lisbon, 2026-11-03 to 2026-11-07?"
+}
+
+### Skills: no matching skill, so the model answers with the direct tools and activates nothing
+POST {{host}}/ask/skills
+Content-Type: application/json
+X-User-Id: alice
+
+{
+  "question": "Find me a flight from Kyiv to Lisbon on 2026-10-20 and convert the cheapest price to UAH."
+}
+
 ### TokenStream over SSE: text, tool-start and tool-end events, then done. Close the connection to cancel the model call
 POST {{host}}/ask/stream
 Content-Type: application/json

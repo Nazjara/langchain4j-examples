@@ -4,6 +4,7 @@ import com.nazjara.model.AskResponse;
 import com.nazjara.model.Question;
 import com.nazjara.model.Role;
 import com.nazjara.model.RoleAnswer;
+import com.nazjara.model.SkillsAnswer;
 import com.nazjara.model.ToolCall;
 import com.nazjara.model.ToolSearch;
 import com.nazjara.model.TripPlan;
@@ -12,11 +13,15 @@ import com.nazjara.service.TravelAssistant;
 import com.nazjara.service.TripPlanner;
 import com.nazjara.tool.RoleToolProvider;
 import com.nazjara.tool.TravelTools;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import dev.langchain4j.guardrail.OutputGuardrailException;
 import dev.langchain4j.invocation.InvocationParameters;
 import dev.langchain4j.model.anthropic.AnthropicTokenUsage;
+import dev.langchain4j.service.Result;
+import dev.langchain4j.service.tool.ToolExecution;
+import dev.langchain4j.skills.Skill;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -40,17 +45,19 @@ public class TravelController {
     private final TravelAssistant simpleSearchAssistant;
     private final TravelAssistant vectorSearchAssistant;
     private final TravelAssistant restrictedAssistant;
+    private final TravelAssistant skillsAssistant;
     private final StreamingTravelAssistant streamingAssistant;
     private final TripPlanner tripPlanner;
 
     /**
-     * Creates the controller over the travel assistants (one per tool search mode, plus the
-     * role-aware blocking and streaming ones) and the trip planner.
+     * Creates the controller over the travel assistants (one per tool search mode, the role-aware
+     * blocking and streaming ones, and the skills one) and the trip planner.
      *
      * @param allToolsAssistant assistant that sends all 15 tools with every request
      * @param simpleSearchAssistant assistant with {@code SimpleToolSearchStrategy}
      * @param vectorSearchAssistant assistant with {@code VectorToolSearchStrategy}
      * @param restrictedAssistant assistant whose tools come from the {@code RoleToolProvider}
+     * @param skillsAssistant assistant with all 15 tools plus agent skills
      * @param streamingAssistant streaming assistant with the same provider
      * @param tripPlanner trip planner with the output guardrail
      */
@@ -58,12 +65,14 @@ public class TravelController {
                             @Qualifier("simpleSearchAssistant") TravelAssistant simpleSearchAssistant,
                             @Qualifier("vectorSearchAssistant") TravelAssistant vectorSearchAssistant,
                             @Qualifier("restrictedAssistant") TravelAssistant restrictedAssistant,
+                            @Qualifier("skillsAssistant") TravelAssistant skillsAssistant,
                             StreamingTravelAssistant streamingAssistant,
                             TripPlanner tripPlanner) {
         this.allToolsAssistant = allToolsAssistant;
         this.simpleSearchAssistant = simpleSearchAssistant;
         this.vectorSearchAssistant = vectorSearchAssistant;
         this.restrictedAssistant = restrictedAssistant;
+        this.skillsAssistant = skillsAssistant;
         this.streamingAssistant = streamingAssistant;
         this.tripPlanner = tripPlanner;
     }
@@ -83,14 +92,41 @@ public class TravelController {
                            @RequestHeader(value = "X-User-Id", defaultValue = "demo-user") String userId,
                            @RequestParam(defaultValue = "NONE") ToolSearch toolSearch) {
         var result = assistant(toolSearch).ask(question.question(), InvocationParameters.from(TravelTools.USER_ID, userId));
-        var toolCalls = result.toolExecutions().stream()
-                .map(execution -> new ToolCall(execution.request().name(), execution.request().arguments(),
-                        execution.result(), execution.hasFailed()))
+        var usage = result.tokenUsage();
+        var anthropicUsage = usage instanceof AnthropicTokenUsage anthropic ? anthropic : null;
+        return new AskResponse(result.content(), toolSearch, result.intermediateResponses().size() + 1, toolCalls(result),
+                usage.inputTokenCount(), usage.outputTokenCount(),
+                anthropicUsage == null ? null : anthropicUsage.cacheReadInputTokens(),
+                anthropicUsage == null ? null : anthropicUsage.cacheCreationInputTokens());
+    }
+
+    /**
+     * Same as {@link #ask} without tool search, plus agent skills. All 15 tools stay visible; the
+     * model also gets {@code activate_skill} and {@code read_skill_resource} and a list of skills in
+     * the system message. An insurance question goes {@code activate_skill("travel-insurance")} →
+     * {@code read_skill_resource(coverage.md)} → {@code quoteInsurance}, a tool that exists only after
+     * the activation. A packing question activates {@code packing-list}, which adds instructions but
+     * no tools.
+     *
+     * @param question JSON body {@code {"question": "..."}}
+     * @param userId current user; insurance is bought for this id, which the model never sees
+     * @return the answer, the skills the model activated, the tool calls and the token usage
+     */
+    @PostMapping("/ask/skills")
+    public SkillsAnswer askWithSkills(@RequestBody Question question,
+                                      @RequestHeader(value = "X-User-Id", defaultValue = "demo-user") String userId) {
+        var result = skillsAssistant.ask(question.question(), InvocationParameters.from(TravelTools.USER_ID, userId));
+        var activatedSkills = result.toolExecutions().stream()
+                .map(ToolExecution::resultObject)
+                .filter(Skill.class::isInstance)
+                .map(Skill.class::cast)
+                .map(Skill::name)
+                .distinct()
                 .toList();
         var usage = result.tokenUsage();
         var anthropicUsage = usage instanceof AnthropicTokenUsage anthropic ? anthropic : null;
-        return new AskResponse(result.content(), toolSearch, result.intermediateResponses().size() + 1, toolCalls,
-                usage.inputTokenCount(), usage.outputTokenCount(),
+        return new SkillsAnswer(result.content(), activatedSkills, result.intermediateResponses().size() + 1,
+                toolCalls(result), usage.inputTokenCount(), usage.outputTokenCount(),
                 anthropicUsage == null ? null : anthropicUsage.cacheReadInputTokens(),
                 anthropicUsage == null ? null : anthropicUsage.cacheCreationInputTokens());
     }
@@ -113,11 +149,7 @@ public class TravelController {
                                     @RequestHeader(value = "X-User-Id", defaultValue = "demo-user") String userId,
                                     @RequestHeader(value = "X-Role", defaultValue = "GUEST") Role role) {
         var result = restrictedAssistant.ask(question.question(), roleParameters(userId, role));
-        var toolCalls = result.toolExecutions().stream()
-                .map(execution -> new ToolCall(execution.request().name(), execution.request().arguments(),
-                        execution.result(), execution.hasFailed()))
-                .toList();
-        return new RoleAnswer(result.content(), role, result.intermediateResponses().size() + 1, toolCalls);
+        return new RoleAnswer(result.content(), role, result.intermediateResponses().size() + 1, toolCalls(result));
     }
 
     /**
@@ -167,6 +199,13 @@ public class TravelController {
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, exception.getMessage());
         problem.setTitle("Trip plan failed validation");
         return problem;
+    }
+
+    private static List<ToolCall> toolCalls(Result<String> result) {
+        return result.toolExecutions().stream()
+                .map(execution -> new ToolCall(execution.request().name(), execution.request().arguments(),
+                        execution.result(), execution.hasFailed()))
+                .toList();
     }
 
     private static InvocationParameters roleParameters(String userId, Role role) {
