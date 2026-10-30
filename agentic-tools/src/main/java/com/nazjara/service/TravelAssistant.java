@@ -4,6 +4,7 @@ import dev.langchain4j.invocation.InvocationParameters;
 import dev.langchain4j.service.Result;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
+import dev.langchain4j.service.V;
 
 /**
  * Travel assistant over the 15 {@code TravelTools}. {@code AiServicesConfig} builds this interface
@@ -17,6 +18,10 @@ import dev.langchain4j.service.UserMessage;
  * guardrails receive the same context. Spring AI's counterpart is
  * {@code .toolContext(Map.of(...))} on the {@code ChatClient} request, read through a
  * {@code ToolContext} tool parameter.
+ *
+ * <p>The question goes in as a {@code @V} value of a method-level {@code @UserMessage}, not as a
+ * {@code @UserMessage} parameter, which would itself be rendered as a template (see
+ * {@code basics}' {@code Assistant}).
  */
 public interface TravelAssistant {
 
@@ -28,5 +33,6 @@ public interface TravelAssistant {
      * @return the answer plus token usage, tool executions and intermediate responses
      */
     @SystemMessage(fromResource = "/prompts/travel-system.txt")
-    Result<String> ask(@UserMessage String question, InvocationParameters parameters);
+    @UserMessage("{{question}}")
+    Result<String> ask(@V("question") String question, InvocationParameters parameters);
 }

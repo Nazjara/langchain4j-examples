@@ -43,6 +43,7 @@ Package convention per module (`com.nazjara`): `rest/QuestionController`, `servi
 - OpenAI image models: use `gpt-image-*`; the DALL·E constants in `OpenAiImageModelName` are deprecated.
 - Java records for DTOs; Lombok for `@Slf4j` / `@RequiredArgsConstructor`. Record fields the model fills get `@Description`.
 - Educational project: Javadoc every class and public method in the API (`rest/`), service, client and config/bootstrap layers. Explain *what LangChain4j does under the hood* (AI Service proxy, tool loop, retrieval augmentor, memory provider) and name the Spring AI equivalent. Models/records don't need it. Verify with `./mvnw javadoc:javadoc -Ddoclint=all,-missing -Dshow=private`.
+- User text never becomes the template: an unannotated single parameter or a `@UserMessage` parameter is rendered, so `{{x}}` in user input throws and `{{current_date}}` is replaced. Use a method-level `@UserMessage("{{it}}")`, or `@UserMessage("{{question}}")` with `@V("question")` when the method has other parameters.
 - Prompt templates live in `src/main/resources/prompts/*.txt` using LangChain4j `{{var}}` syntax, referenced via `@SystemMessage`/`@UserMessage(fromResource = "/prompts/...")`.
 - Model settings go in each module's `application.properties` under `langchain4j.anthropic.chat-model.*`.
 - `@AiService` auto-wiring fails on duplicate beans of the same type; use `wiringMode = EXPLICIT` or `AiServices.builder(...)` in `@Configuration` when a module needs two differently wired services.

@@ -2,6 +2,7 @@ package com.nazjara;
 
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.Result;
+import dev.langchain4j.service.UserMessage;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -26,6 +27,7 @@ class ThinkingAndEffortTest extends BaseTestClass {
 
     interface Solver {
 
+        @UserMessage("{{it}}")
         Result<String> solve(String problem);
     }
 

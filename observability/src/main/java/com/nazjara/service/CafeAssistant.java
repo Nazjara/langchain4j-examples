@@ -13,6 +13,9 @@ import dev.langchain4j.service.UserMessage;
  * (embed the question, search the store, append the chunks to the user message), the first
  * model call, the tool if the model asks for it, and a second model call. That single thread is
  * what lets every span of the call nest under the HTTP request span.
+ *
+ * <p>{@code @UserMessage("{{it}}")} puts the question into the message as a value; without it the
+ * question would itself be rendered as a template (see {@code basics}' {@code Assistant}).
  */
 public interface CafeAssistant {
 
@@ -24,5 +27,6 @@ public interface CafeAssistant {
      * usage summed over all model calls
      */
     @SystemMessage(fromResource = "/prompts/cafe-system.txt")
-    Result<String> ask(@UserMessage String question);
+    @UserMessage("{{it}}")
+    Result<String> ask(String question);
 }

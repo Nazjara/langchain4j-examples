@@ -4,6 +4,7 @@ import com.nazjara.model.TripPlan;
 import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
+import dev.langchain4j.service.V;
 import dev.langchain4j.service.memory.ChatMemoryAccess;
 
 /**
@@ -33,5 +34,6 @@ public interface TripPlanner extends ChatMemoryAccess {
      * @return the plan that passed the guardrail
      */
     @SystemMessage(fromResource = "/prompts/planner-system.txt")
-    TripPlan plan(@MemoryId String planId, @UserMessage String request);
+    @UserMessage("{{request}}")
+    TripPlan plan(@MemoryId String planId, @V("request") String request);
 }

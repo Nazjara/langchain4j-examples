@@ -2,6 +2,7 @@ package com.nazjara.service;
 
 import dev.langchain4j.service.Result;
 import dev.langchain4j.service.SystemMessage;
+import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.spring.AiService;
 
 /**
@@ -34,10 +35,14 @@ public interface WeatherAssistant {
     /**
      * Answers a weather question, calling the weather tool as many times as the model needs.
      *
+     * <p>{@code @UserMessage("{{it}}")} puts the question into the message as a value; without it
+     * the question would itself be rendered as a template (see {@code basics}' {@code Assistant}).
+     *
      * @param question the user's question
      * @return the model's final answer
      */
     @SystemMessage(fromResource = "/prompts/weather-system.txt")
+    @UserMessage("{{it}}")
     String ask(String question);
 
     /**
@@ -50,5 +55,6 @@ public interface WeatherAssistant {
      * @return the answer plus the tool executions that produced it
      */
     @SystemMessage(fromResource = "/prompts/weather-system.txt")
+    @UserMessage("{{it}}")
     Result<String> askWithToolCalls(String question);
 }

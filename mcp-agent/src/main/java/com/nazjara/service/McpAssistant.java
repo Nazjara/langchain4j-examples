@@ -24,10 +24,14 @@ public interface McpAssistant {
     /**
      * Answers a question, calling the server's MCP tools as often as the model needs.
      *
+     * <p>{@code @UserMessage("{{it}}")} puts the question into the message as a value; without it
+     * the question would itself be rendered as a template (see {@code basics}' {@code Assistant}).
+     *
      * @param question the user's question
      * @return the model's final answer
      */
     @SystemMessage(fromResource = "/prompts/weather-system.txt")
+    @UserMessage("{{it}}")
     String ask(String question);
 
     /**
@@ -35,10 +39,15 @@ public interface McpAssistant {
      * Resources are application-controlled: the model does not fetch them, the caller puts their
      * content into the prompt.
      *
+     * <p>The question is a {@code @V} value, not a {@code @UserMessage} parameter: a
+     * {@code @UserMessage} parameter is rendered as a template, so a question containing
+     * {@code {{resource}}} would pull the whole resource into the user message.
+     *
      * @param resource text content of the resource
      * @param question the user's question
      * @return the model's answer
      */
     @SystemMessage(fromResource = "/prompts/resource-system.txt")
-    String askAboutResource(@V("resource") String resource, @UserMessage String question);
+    @UserMessage("{{question}}")
+    String askAboutResource(@V("resource") String resource, @V("question") String question);
 }

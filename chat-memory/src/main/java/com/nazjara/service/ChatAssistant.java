@@ -3,6 +3,7 @@ package com.nazjara.service;
 import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.UserMessage;
+import dev.langchain4j.service.V;
 import dev.langchain4j.service.spring.AiService;
 import reactor.core.publisher.Flux;
 
@@ -16,6 +17,10 @@ import reactor.core.publisher.Flux;
  *
  * <p>In Spring AI the conversation id is not part of the method signature: it is passed per call as
  * an advisor parameter ({@code ChatMemory.CONVERSATION_ID}) to a {@code MessageChatMemoryAdvisor}.
+ *
+ * <p>The message goes in as a {@code @V} value of a method-level {@code @UserMessage}, not as a
+ * {@code @UserMessage} parameter, which would itself be rendered as a template (see
+ * {@code basics}' {@code Assistant}).
  */
 @AiService
 public interface ChatAssistant {
@@ -28,7 +33,8 @@ public interface ChatAssistant {
      * @return the model's reply
      */
     @SystemMessage(fromResource = "/prompts/chat-system.txt")
-    String chat(@MemoryId String conversationId, @UserMessage String message);
+    @UserMessage("{{message}}")
+    String chat(@MemoryId String conversationId, @V("message") String message);
 
     /**
      * Same as {@link #chat(String, String)}, but returns the reply as it is generated.
@@ -45,5 +51,6 @@ public interface ChatAssistant {
      * @return the reply as partial text fragments
      */
     @SystemMessage(fromResource = "/prompts/chat-system.txt")
-    Flux<String> chatStream(@MemoryId String conversationId, @UserMessage String message);
+    @UserMessage("{{message}}")
+    Flux<String> chatStream(@MemoryId String conversationId, @V("message") String message);
 }

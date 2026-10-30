@@ -2,6 +2,7 @@ package com.nazjara;
 
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.service.SystemMessage;
+import dev.langchain4j.service.UserMessage;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -22,11 +23,13 @@ class SystemPromptTest extends BaseTestClass {
                 You are a city guide writing for families with children under ten who are planning \
                 their first visit. They read on a phone while deciding whether the trip is worth it, \
                 so lead with what makes the city fun for kids and keep practical tips concrete.""")
+        @UserMessage("{{it}}")
         String cityGuide(String question);
 
         @SystemMessage("""
                 You are a Shakespearean pirate narrating a cooking show. Stay in character for the \
                 whole conversation: the show is scripted, and a plain answer would break it.""")
+        @UserMessage("{{it}}")
         String piratePersona(String request);
     }
 

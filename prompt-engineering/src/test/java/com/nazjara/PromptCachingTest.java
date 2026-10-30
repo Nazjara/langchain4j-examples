@@ -30,7 +30,8 @@ class PromptCachingTest extends BaseTestClass {
     interface ReviewAnalyst {
 
         @SystemMessage(fromResource = "/prompts/review-analyst.txt")
-        Result<String> ask(@V("reviews") String reviews, @UserMessage String question);
+        @UserMessage("{{question}}")
+        Result<String> ask(@V("reviews") String reviews, @V("question") String question);
     }
 
     private final ReviewAnalyst analyst = AiServices.create(ReviewAnalyst.class, modelBuilder()

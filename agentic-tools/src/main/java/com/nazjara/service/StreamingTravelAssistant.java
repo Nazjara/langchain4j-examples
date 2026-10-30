@@ -4,6 +4,7 @@ import dev.langchain4j.invocation.InvocationParameters;
 import dev.langchain4j.service.SystemMessage;
 import dev.langchain4j.service.TokenStream;
 import dev.langchain4j.service.UserMessage;
+import dev.langchain4j.service.V;
 
 /**
  * Streaming twin of {@link TravelAssistant}. Returning {@link TokenStream} tells the AI Service
@@ -25,5 +26,6 @@ public interface StreamingTravelAssistant {
      * @return the callback builder; call {@code start()} after registering handlers
      */
     @SystemMessage(fromResource = "/prompts/travel-system.txt")
-    TokenStream ask(@UserMessage String question, InvocationParameters parameters);
+    @UserMessage("{{question}}")
+    TokenStream ask(@V("question") String question, InvocationParameters parameters);
 }

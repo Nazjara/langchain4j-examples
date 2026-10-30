@@ -4,6 +4,7 @@ import static dev.langchain4j.service.spring.AiServiceWiringMode.EXPLICIT;
 
 import dev.langchain4j.service.Result;
 import dev.langchain4j.service.SystemMessage;
+import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.spring.AiService;
 
 /**
@@ -27,9 +28,13 @@ public interface RagAssistant {
     /**
      * Answers a question, with retrieval from every source done by the proxy before the model call.
      *
+     * <p>{@code @UserMessage("{{it}}")} puts the question into the message as a value; without it
+     * the question would itself be rendered as a template (see {@code basics}' {@code Assistant}).
+     *
      * @param question the user's question
      * @return the model's answer plus the injected chunks ({@code sources()})
      */
     @SystemMessage(fromResource = "/prompts/system-message.txt")
+    @UserMessage("{{it}}")
     Result<String> ask(String question);
 }

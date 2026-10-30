@@ -29,12 +29,18 @@ import java.util.List;
 public interface Assistant {
 
     /**
-     * Sends the question as-is and returns the model's free-text reply. With no
-     * {@code @UserMessage}, the single {@code String} argument becomes the user message.
+     * Sends the question as-is and returns the model's free-text reply.
+     *
+     * <p>{@code {{it}}} is the name of the single argument, so the question is put into the
+     * template as a value. Without a method-level {@code @UserMessage}, the argument itself would
+     * become the template and be rendered: a question containing {@code {{name}}} would fail with
+     * "Value for the variable 'name' is missing", and {@code {{current_date}}} would be silently
+     * replaced with today's date. The same applies to a parameter annotated {@code @UserMessage}.
      *
      * @param question the user's question
      * @return the model's answer as plain text
      */
+    @UserMessage("{{it}}")
     String ask(String question);
 
     /**
@@ -45,6 +51,7 @@ public interface Assistant {
      * @param question the user's question
      * @return the answer plus call metadata
      */
+    @UserMessage("{{it}}")
     Result<String> askWithMetadata(String question);
 
     /**

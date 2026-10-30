@@ -4,6 +4,7 @@ import static dev.langchain4j.service.spring.AiServiceWiringMode.EXPLICIT;
 
 import dev.langchain4j.service.Result;
 import dev.langchain4j.service.SystemMessage;
+import dev.langchain4j.service.UserMessage;
 import dev.langchain4j.service.spring.AiService;
 
 /**
@@ -25,5 +26,6 @@ public interface RoutingRagAssistant {
      * @return the model's answer plus the injected chunks ({@code sources()})
      */
     @SystemMessage(fromResource = "/prompts/system-message.txt")
+    @UserMessage("{{it}}")
     Result<String> ask(String question);
 }
