@@ -1,0 +1,5 @@
+Act as a travel agent. Answer the traveller's question briefly and practically.
+
+<question>
+{{question}}
+</question>

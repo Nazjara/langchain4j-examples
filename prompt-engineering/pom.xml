@@ -11,9 +11,11 @@
 
     <artifactId>prompt-engineering</artifactId>
 
-    <properties>
-        <!-- Tests only: no application class to repackage -->
-        <spring-boot.repackage.skip>true</spring-boot.repackage.skip>
-    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-guardrails</artifactId>
+        </dependency>
+    </dependencies>
 
 </project>
