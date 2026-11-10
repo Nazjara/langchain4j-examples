@@ -1,6 +1,6 @@
 # Spring AI 2.0 vs LangChain4j 1.20
 
-Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1.20.2 (starters `1.20.2-beta30`), both on Spring Boot 4.1.1 and Java 25, with Claude as the chat model.
+Versions compared: Spring AI 2.0.1 and LangChain4j 1.20.2 (starters `1.20.2-beta30`), both on Spring Boot 4.1.1 and Java 25, with Claude as the chat model. Each module covers the capability of the spring-ai-examples module of the same name, built the LangChain4j way rather than ported. Several modules were then extended with LangChain4j-only features (Stage B), and `mcp-http-server` has no Spring AI counterpart module.
 
 ## Mental model
 
@@ -237,7 +237,30 @@ Filled in module by module. Versions compared: Spring AI 2.0.1 and LangChain4j 1
 - **Token-sized splitting needs an explicit estimator.** `DocumentSplitters.recursive(256, 32, new HuggingFaceTokenCountEstimator())` measures in MiniLM tokens. Without an estimator, the sizes are characters.
 - **Milvus has no Boot starter.** The store is built in `@Configuration` from custom `ai.rag.milvus.*` properties. The v1 `MilvusEmbeddingStore` is deprecated in favour of `langchain4j-milvus-v2`'s `MilvusV2EmbeddingStore`. The collection is `langchain4j_minilm`, because the two libraries use different field layouts.
 
+## Size per module
+
+Java lines without comments or blank lines, counted on 2026-11-10. Prompts, `SKILL.md` files and properties are not counted. The two columns rarely cover the same scope, so the last column says what the difference comes from.
+
+| Module | Main: Spring AI / LangChain4j | Tests: Spring AI / LangChain4j | Where the difference comes from |
+|---|---|---|---|
+| `basics` | 125 / 119 | 25 / 20 | No `AiServiceImpl`, but the hand-built `ChatModel` for native JSON-schema output takes most of that saving back |
+| `prompt-engineering` | 9 / 192 | 254 / 457 | Spring AI's module is tests only. LangChain4j's also has the Stage B app: input guardrails, `@StructuredPrompt`, dynamic system messages |
+| `functions` | 129 / 121 | 0 / 128 | About the same: a `@Tool` bean replaces the `Function` + `FunctionToolCallback` |
+| `rag` | 169 / 321 | 0 / 149 | Stage B source routing (per-source retrievers, two augmentors, source properties) and the hand-built Milvus store |
+| `chat-memory` | 184 / 129 | 0 / 169 | Spring AI's also has vector memory and a memory-type switch |
+| `image` | 96 / 56 | 0 / 94 | Vision is an `ImageContent` parameter on the AI Service, with no hand-built message |
+| `audio` | 59 / 49 | 9 / 46 | About the same; LangChain4j's model is a hand-built bean |
+| `mcp-server` | 318 / 93 | 212 / 117 | Spring AI's serves tools, resources and prompts over HTTP, plus the forecast tool with progress, elicitation and sampling. LangChain4j's serves one tool over stdio |
+| `mcp-http-server` | — / 505 | — / 232 | No Spring AI counterpart: resources and prompts over HTTP, built on the MCP Java SDK with hand-written schemas |
+| `mcp-agent` | 560 / 317 | 372 / 527 | Spring AI's has one MCP client per user, with the question relay and sampling. LangChain4j's merges two servers and adds its own resources-as-tools presenter |
+| `agentic-tools` | 258 / 751 | 102 / 806 | Same 15 tools. LangChain4j's adds three builder-built assistants and the Stage B role-based `ToolProvider`, `TokenStream` events with cancellation, and skills |
+| `observability` | 111 / 378 | 55 / 349 | Spring AI observes every step itself. LangChain4j needs about 200 lines of its own listeners for the AI Service, retrieval and tool spans |
+
+Where the scopes match (`basics`, `functions`, `audio`), the main code is about the same size. Where LangChain4j's is larger, the cause is either Stage B features or wiring that Spring AI provides itself (observability, the HTTP MCP server). The test code is larger mostly because almost every LangChain4j module has key-free tests against stub models, which the plain `ChatModel` interface makes easy to write.
+
 ## Gaps and strengths
+
+**In short.** LangChain4j's strength is the AI Service. Typed parameters (`@MemoryId`, `InvocationParameters`, `ImageContent`) carry context, `Result<T>` shows the tool loop and the retrieved sources, and pluggable slots (tool providers, tool search, guardrails, skills, error strategies) shape a call. All of it works without Spring. Spring AI's strength is its Spring integration: features configured from properties, every step observed with no code, per-call options, a full MCP stack on both sides, and evaluators. Most LangChain4j features beyond the basics are set only on `AiServices.builder(...)`, because `@AiService` has no attribute for them, so larger modules build their services in `@Configuration`.
 
 ### Only / better in Spring AI
 

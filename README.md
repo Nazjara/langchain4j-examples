@@ -1,6 +1,6 @@
 # LangChain4j Examples
 
-Examples of using [LangChain4j](https://docs.langchain4j.dev) with Spring Boot, built as a side-by-side counterpart of [spring-ai-examples](../spring-ai-examples): same modules and endpoints, so the two frameworks can be compared directly. See [COMPARISON.md](COMPARISON.md).
+Examples of using [LangChain4j](https://docs.langchain4j.dev) with Spring Boot. Each module covers a feature of the matching [spring-ai-examples](../spring-ai-examples) module, on the same sample data, but is designed around LangChain4j's own API rather than ported, so endpoints differ where LangChain4j has a better fit. Several modules go further, with features only LangChain4j has (input guardrails, structured and dynamic prompts, query routing, dynamic tool sets, `TokenStream` events, agent skills). [COMPARISON.md](COMPARISON.md) records the differences, module sizes and where each framework is stronger.
 
 ## Prerequisites
 
@@ -24,6 +24,7 @@ Examples of using [LangChain4j](https://docs.langchain4j.dev) with Spring Boot, 
    ```
    ./mvnw clean install
    ```
+   Most tests use stub models and need no key. Tests that call Claude or OpenAI run only when the matching key is set, and they cost API credits; add `-DskipTests` to skip all tests. If your default JDK is older than 25, prefix the command with `JAVA_HOME=<path to JDK 25>`.
 
 ## Modules
 
